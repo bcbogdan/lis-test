@@ -316,8 +316,7 @@ while (-not $cmdStatus -and $maxChecks -lt 3)
 
 if (-not $cmdStatus)
 {
-    "Error: Failed to force $controllerType device rescan"
-    return $False
+    "Warning: Failed to force $controllerType device rescan"
 }
 
 
@@ -424,8 +423,7 @@ while (-not $cmdStatus -and $maxChecks -lt 3)
 
 if (-not $cmdStatus)
 {
-    "Error: Failed to force $controllerType device rescan"
-    return $False
+    "Warning: Failed to force $controllerType device rescan"
 }
 
 $shrinkDiskSize = .\bin\plink.exe -i ssh\${sshKey} root@${ipv4} "fdisk -l /dev/sdb  2> /dev/null | grep Disk | grep sdb | cut -f 5 -d ' '"
