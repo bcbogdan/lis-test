@@ -24,7 +24,7 @@
 #
 # install_lis_next.sh
 #
-# Clones the Lis-Next repository from github, then build and 
+# Clones the Lis-Next repository from github, then build and
 # install LIS from the source code.
 # Currently works with RHEL/CentOS 6.x and 7.x
 #
@@ -100,7 +100,7 @@ if [ -e ./lis-next ]; then
 fi
 
 #
-# Clone Lis-Next 
+# Clone Lis-Next
 #
 LogMsg "Info : Cloning lis-next"
 git clone https://github.com/LIS/lis-next
@@ -109,6 +109,16 @@ if [ $? -ne 0 ]; then
     UpdateTestState $ICA_TESTFAILED
     exit 1
 fi
+
+if [ ! ${branch} ]; then
+    LogMsg "The branch variable is not defined! Will use default master."
+    echo "The branch variable is not defined! Will use default master." >> ~/summary.
+    branch="master"
+fi
+
+cd ./lis-next
+git checkout $branch
+cd ..
 
 #
 # Detect the version of CentOS/RHEL we are running
@@ -143,7 +153,7 @@ echo "Kernel: $(uname -r)" >> ~/summary.log
 if [[ ${lis_cleanup} -eq "yes" ]]; then
     LogMsg "Info: Existing LIS clean-up flag present, removing old modules..."
 	echo "Info: Existing LIS clean-up flag present, removing old modules..." >> ~/summary.log
-	
+
 	# clean-up previous installed lis modules
 	rm -rf /lib/modules/$(uname -r)/extra/microsoft-hyper-v
 	rm -rf /lib/modules/$(uname -r)/weak-updates/microsoft-hyper-v
@@ -153,7 +163,7 @@ LogMsg "Info : Building ${rhel_version}.x source tree"
 cd lis-next/hv-rhel${rhel_version}.x/hv
 
 # Defining a custom LIS version string in order to acknoledge the use of these drivers
-sed --in-place -e s:"#define HV_DRV_VERSION.*":"#define HV_DRV_VERSION "'"4.1.0-'$build_date'"'"": include/linux/hv_compat.h
+sed --in-place -e s:"#define HV_DRV_VERSION.*":"#define HV_DRV_VERSION "'"'$branch'-'$build_date'"'"": include/linux/hv_compat.h
 
 ./rhel${rhel_version}-hv-driver-install
 if [ $? -ne 0 ]; then
@@ -183,12 +193,12 @@ case "$DISTRO" in
 redhat_7|centos_7)
 	if [[ $(systemctl list-units --type=service | grep hyperv) ]]; then
 			LogMsg "Running daemons are being stopped."
-				systemctl stop hypervkvpd.service 
+				systemctl stop hypervkvpd.service
 				if [ $? -ne 0 ]; then
 						echo "Error: Unabele to stop hypervkvpd." >> ~/summary.log
-						UpdateTestState $ICA_TESTFAILED                    
+						UpdateTestState $ICA_TESTFAILED
 				fi
-				systemctl stop hypervvssd.service 
+				systemctl stop hypervvssd.service
 				if [ $? -ne 0 ]; then
 						 echo "Error: Unable to stop hypervvssd." >> ~/summary.log
 						 UpdateTestState $ICA_TESTFAILED
@@ -200,7 +210,7 @@ redhat_7|centos_7)
 				fi
 			LogMsg "Running daemons have been stopped."
 	fi
-		
+
 	LogMsg "Info: Backing up default daemons."
 
 	\cp /usr/sbin/hypervkvpd /usr/sbin/hypervkvpd.old
@@ -218,7 +228,7 @@ redhat_7|centos_7)
 			echo "Error: Unable to copy hv-fcopy-daemon." >> ~/summary.log
 			UpdateTestState $ICA_TESTFAILED
 		fi
-		
+
 	LogMsg "Info: Copying compiled daemons."
 	mv -f hv_kvp_daemon /usr/sbin/hypervkvpd
 	if [ $? -ne 0 ]; then
@@ -261,7 +271,7 @@ redhat_7|centos_7)
 			echo "Error: Unable to reload daemon." >> ~/summary.log
 			UpdateTestState $ICA_TESTFAILED
 		fi
-		
+
 	systemctl start hypervkvpd.service
 		if [ $? -ne 0 ]; then
 			echo "Info: The below warnings can be ignored if no existing LIS daemons are installed." >> ~/summary.log
@@ -288,7 +298,7 @@ redhat_6|centos_6)
             echo "Error: Unable to kill daemons." >> ~/summary.log
             UpdateTestState $ICA_TESTFAILED
         fi
-		
+
     if [[ $(service --status-all | grep _daemon) ]]; then
         LogMsg "Running daemons are being stopped."
             service hypervkvpd stop
@@ -317,7 +327,7 @@ redhat_6|centos_6)
             fi
         LogMsg "Running daemons stopped."
     fi
-	
+
     LogMsg "Info: Backing up default daemons."
 
     \cp /usr/sbin/hv_kvp_daemon /usr/sbin/hv_kvp_daemon.old
@@ -335,7 +345,7 @@ redhat_6|centos_6)
             echo "Error: Unable to copy hv-fcopy-daemon." >> ~/summary.log
             UpdateTestState $ICA_TESTFAILED
         fi
-		
+
     LogMsg "Default daemons back up."
     LogMsg "Copying compiled daemons."
     mv -f hv_kvp_daemon /usr/sbin/
@@ -365,7 +375,7 @@ redhat_6|centos_6)
                 UpdateTestState $ICA_TESTFAILED
             fi
         fi
-    service hypervvssd start 
+    service hypervvssd start
         if [ $? -ne 0 ]; then
              service hv_vss_daemon start
             if [ $? -ne 0 ]; then
@@ -373,15 +383,15 @@ redhat_6|centos_6)
                 UpdateTestState $ICA_TESTFAILED
             fi
         fi
-    service hypervfcopyd start 
+    service hypervfcopyd start
         if [ $? -ne 0 ]; then
-            service hv_fcopy_daemon start 
+            service hv_fcopy_daemon start
                 if [ $? -ne 0 ]; then
                 echo "Error: Unable to start hv-fcopy-daemon." >> ~/summary.log
                 UpdateTestState $ICA_TESTFAILED
             fi
         fi
-		
+
     LogMsg "Info: LIS daemons started."
 ;;
 esac
