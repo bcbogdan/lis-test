@@ -41,7 +41,7 @@ class TestRun(object):
     TestRun class is being used to store test run specific data and launch
     different parsing methods in order to process the output of a test run.
     """
-    def __init__(self, skip_vm_check=False):
+    def __init__(self, skip_vm_check=False, checkpoint_name=False):
         self.suite = ''
         self.timestamp = ''
         self.log_path = ''
@@ -50,6 +50,7 @@ class TestRun(object):
         self.test_cases = dict()
         self.lis_version = ''
         self.server_name = os.environ['COMPUTERNAME']
+        self.checkpoint_name = checkpoint_name
 
     def update_from_xml(self, xml_path):
         xml_object = ParseXML(xml_path)
@@ -70,7 +71,8 @@ class TestRun(object):
                 vm_name=vm_name,
                 hv_server=vm_details['hvServer'],
                 os=vm_details['os'],
-                check=self.validate_vm
+                check=self.validate_vm,
+                checkpoint_name=self.checkpoint_name
                 )
 
     def update_from_ica(self, log_path):
@@ -204,8 +206,8 @@ class TestRun(object):
 
 
 class PerfTestRun(TestRun):
-    def __init__(self, perf_path, skip_vm_check=True):
-        super(PerfTestRun, self).__init__(skip_vm_check)
+    def __init__(self, perf_path, skip_vm_check=True, checkpoint_name=False):
+        super(PerfTestRun, self).__init__(skip_vm_check, checkpoint_name)
         self.perf_path = perf_path
 
     def update_from_ica(self, log_path):
@@ -276,54 +278,39 @@ class PerfTestRun(TestRun):
 
     @staticmethod
     def prep_for_fio(table_dict, test_case_obj):
-        table_dict['rand_read_iops'] = float(test_case_obj.perf_dict[
-                                                 'rand-read:'])
-        table_dict['rand_read_lat_usec'] = test_case_obj.perf_dict[
-            'rand-read: latency']
-        table_dict['rand_write_iops'] = float(test_case_obj.perf_dict[
-                                                  'rand-write:'])
-        table_dict['rand_write_lat_usec'] = float(test_case_obj.perf_dict[
-            'rand-write: latency'])
-        table_dict['seq_read_iops'] = float(test_case_obj.perf_dict[
-                                                'seq-read:'])
-        table_dict['seq_write_iops'] = float(test_case_obj.perf_dict[
-                                                 'seq-write:'])
-        table_dict['seq_write_lat_usec'] = float(test_case_obj.perf_dict[
-            'seq-write: latency'])
-        table_dict['seq_read_lat_usec'] = float(test_case_obj.perf_dict[
-            'seq-read: latency'])
+        table_dict['rand_read_iops'] = float(test_case_obj.perf_dict['rand-read:'])
+        table_dict['rand_read_lat_usec'] = test_case_obj.perf_dict['rand-read: latency']
+        table_dict['rand_write_iops'] = float(test_case_obj.perf_dict['rand-write:'])
+        table_dict['rand_write_lat_usec'] = float(test_case_obj.perf_dict['rand-write: latency'])
+        table_dict['seq_read_iops'] = float(test_case_obj.perf_dict['seq-read:'])
+        table_dict['seq_write_iops'] = float(test_case_obj.perf_dict['seq-write:'])
+        table_dict['seq_write_lat_usec'] = float(test_case_obj.perf_dict['seq-write: latency'])
+        table_dict['seq_read_lat_usec'] = float(test_case_obj.perf_dict['seq-read: latency'])
         table_dict['QDepth'] = test_case_obj.perf_dict['QDepth']
         table_dict['BlockSize_KB'] = test_case_obj.perf_dict['BlockSize_KB']
 
     @staticmethod
     def prep_for_ntttcp(table_dict, test_case_obj):
-        table_dict['NumberOfConnections'] = int(test_case_obj.perf_dict[
-                                                    '#test_connections'])
-        table_dict['Throughput_Gbps'] = float(test_case_obj.perf_dict[
-                                                   'throughput_gbps'])
-        table_dict['Latency_ms'] = float(test_case_obj.perf_dict[
-                                             'average_tcp_latency'])
-        table_dict['PacketSize_KBytes'] = float(test_case_obj.perf_dict[
-                                                    'average_packet_size'])
+        table_dict['NumberOfConnections'] = int(test_case_obj.perf_dict['NumberOfConnections'])
+        table_dict['Throughput_Gbps'] = float(test_case_obj.perf_dict['Throughput_Gbps'])
+        table_dict['Latency_ms'] = float(test_case_obj.perf_dict['AverageLatency_ms'])
+        table_dict['PacketSize_KBytes'] = float(test_case_obj.perf_dict['PacketSize_KBytes'])
+        table_dict['SenderCyclesPerByte'] = float(test_case_obj.perf_dict['SenderCyclesPerByte'])
+        table_dict['ReceiverCyclesPerByte'] = float(test_case_obj.perf_dict[
+                                                        'ReceiverCyclesPerByte'])
         table_dict['IPVersion'] = test_case_obj.perf_dict['IPVersion']
         table_dict['ProtocolType'] = test_case_obj.perf_dict['Protocol']
 
     @staticmethod
     def prep_for_iperf(table_dict, test_case_obj):
-        table_dict['NumberOfConnections'] = int(test_case_obj.perf_dict[
-                                                    'NumberOfConnections'])
-        table_dict['TxThroughput_Gbps'] = float(test_case_obj.perf_dict[
-                                                  'TxThroughput_Gbps'])
-        table_dict['RxThroughput_Gbps'] = float(test_case_obj.perf_dict[
-                                                  'RxThroughput_Gbps'])
-        table_dict['DatagramLoss'] = float(test_case_obj.perf_dict[
-                                             'DatagramLoss'])
-        table_dict['PacketSize_KBytes'] = float(test_case_obj.perf_dict[
-                                                    'PacketSize_KBytes'])
+        table_dict['NumberOfConnections'] = int(test_case_obj.perf_dict['NumberOfConnections'])
+        table_dict['TxThroughput_Gbps'] = float(test_case_obj.perf_dict['TxThroughput_Gbps'])
+        table_dict['RxThroughput_Gbps'] = float(test_case_obj.perf_dict['RxThroughput_Gbps'])
+        table_dict['DatagramLoss'] = float(test_case_obj.perf_dict['DatagramLoss'])
+        table_dict['PacketSize_KBytes'] = float(test_case_obj.perf_dict['PacketSize_KBytes'])
         table_dict['IPVersion'] = test_case_obj.perf_dict['IPVersion']
         table_dict['ProtocolType'] = test_case_obj.perf_dict['Protocol']
-        table_dict['SendBufSize_KBytes'] = test_case_obj.perf_dict[
-            'SendBufSize_KBytes']
+        table_dict['SendBufSize_KBytes'] = test_case_obj.perf_dict['SendBufSize_KBytes']
 
 
 class TestCase(object):

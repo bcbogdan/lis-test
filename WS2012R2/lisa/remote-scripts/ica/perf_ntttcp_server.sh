@@ -218,17 +218,19 @@ else
     ipVersion=$null
 fi
 
-echo "Installing LAGSCOPE ..." >> ~/summary.log
-if [ "$(which lagscope)" == "" ]; then
-    rm -rf lagscope
-    git clone https://github.com/Microsoft/lagscope
-    if [ $? -eq 0 ]; then
-        cd lagscope/src
-        make && make install
-        echo "LAGSCOPE installed.." >> ~/summary.log
-        LogMsg "LAGSCOPE instaled.."
-    fi        
-cd $HOME
+setup_lagscope
+if [ $? -ne 0 ]; then
+    echo "Unable to compile lagscope."
+    LogMsg "Unable to compile lagscope."
+    UpdateTestState $ICA_TESTABORTED
+fi
+
+#Install NTTTCP for network throughput
+setup_ntttcp
+if [ $? -ne 0 ]; then
+    echo "Unable to compile ntttcp-for-linux."
+    LogMsg "Unable to compile ntttcp-for-linux."
+    UpdateTestState $ICA_TESTABORTED
 fi
 
 LogMsg "Enlarging the system limit"
@@ -245,6 +247,14 @@ GetDistro
 
 case "$DISTRO" in
 debian*|ubuntu*)
+    disable_firewall
+    if [[ $? -ne 0 ]]; then
+        msg="ERROR: Unable to disable firewall.Exiting"
+        LogMsg "${msg}"
+        echo "${msg}" >> ~/summary.log
+        UpdateTestState $ICA_TESTFAILED
+        exit 1
+    fi
     LogMsg "Installing sar on Ubuntu"
     apt-get install sysstat -y
     if [ $? -ne 0 ]; then
@@ -262,86 +272,23 @@ debian*|ubuntu*)
         UpdateTestState $ICA_TESTFAILED
         exit 85
     fi
-    service ufw status
-    if [ $? -ne 3 ]; then
-        LogMsg "Disabling firewall on Ubuntu"
-        service ufw stop
-        if [ $? -ne 0 ]; then
-                msg="Error: Failed to stop ufw"
-                LogMsg "${msg}"
-                echo "${msg}" >> ~/summary.log
-                UpdateTestState $ICA_TESTFAILED
-                exit 85
-        fi
-    fi
     ;;
 redhat_5|redhat_6|centos_6)
     if [ "$DISTRO" == "redhat_6" ] || ["$DISTRO" == "centos_6" ]; then
-        # Import CERN's GPG key
-        rpm --import http://ftp.scientificlinux.org/linux/scientific/5x/x86_64/RPM-GPG-KEYs/RPM-GPG-KEY-cern
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to import CERN's GPG key."
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-            UpdateTestState $ICA_TESTFAILED
-            exit 1
-        fi
-
-        # Save repository information
-        wget -O /etc/yum.repos.d/slc6-devtoolset.repo http://linuxsoft.cern.ch/cern/devtoolset/slc6-devtoolset.repo
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to save repository information."
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-            UpdateTestState $ICA_TESTFAILED
-            exit 1
-        fi
-
-        # The below will also install all the required dependencies
-        yum install -y devtoolset-2-gcc-c++
+        upgrade_gcc
         if [ $? -ne 0 ]; then
             msg="Error: Failed to install the new version of gcc."
             LogMsg "${msg}"
             echo "${msg}" >> ~/summary.log
             UpdateTestState $ICA_TESTFAILED
+        fi    
+        disable_firewall
+        if [[ $? -ne 0 ]]; then
+            msg="ERROR: Unable to disable firewall.Exiting"
+            LogMsg "${msg}"
+            echo "${msg}" >> ~/summary.log
+            UpdateTestState $ICA_TESTFAILED
             exit 1
-        fi
-
-        echo "source /opt/rh/devtoolset-2/enable" >> /root/.bashrc
-        source /root/.bashrc
-    fi
-    LogMsg "Check iptables status on RHEL"
-    service iptables status
-    if [ $? -ne 3 ]; then
-        LogMsg "Disabling firewall on Redhat"
-        iptables -X
-        iptables -F
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to flush iptables rules. Continuing"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-        fi
-        service iptables stop
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to stop iptables"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-            UpdateTestState $ICA_TESTFAILED
-            exit 85
-        fi
-        service ip6tables stop
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to stop ip6tables"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-            UpdateTestState $ICA_TESTFAILED
-            exit 85
-        fi
-        chkconfig iptables off
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to turn off iptables. Continuing"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
         fi
     fi
     ;;
@@ -365,30 +312,13 @@ redhat_7)
             echo "${msg}" >> ~/summary.log
         fi
     fi
-
-    LogMsg "Check iptables status on RHEL 7"
-    service iptables status
-    if [ $? -ne 3 ]; then
-        iptables -F;
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to flush iptables rules. Continuing"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-        fi
-        service iptables stop
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to stop iptables"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-            UpdateTestState $ICA_TESTFAILED
-            exit 85
-        fi
-        chkconfig iptables off
-        if [ $? -ne 0 ]; then
-            msg="Error: Failed to turn off iptables. Continuing"
-            LogMsg "${msg}"
-            echo "${msg}" >> ~/summary.log
-        fi
+    disable_firewall
+    if [[ $? -ne 0 ]]; then
+        msg="ERROR: Unable to disable firewall.Exiting"
+        LogMsg "${msg}"
+        echo "${msg}" >> ~/summary.log
+        UpdateTestState $ICA_TESTFAILED
+        exit 1
     fi
     ;;
 suse_12)
@@ -419,37 +349,6 @@ suse_12)
     ;;
 esac
 
-git clone https://github.com/Microsoft/ntttcp-for-linux.git
-
-# Get the root directory of the tarball
-#
-rootDir="ntttcp-for-linux"
-LogMsg "rootDir = ${rootDir}"
-
-cd ${rootDir}/src
-#
-# Build ntttcp
-#
-rm -f /usr/bin/ntttcp
-
-make
-if [ $? -ne 0 ]; then
-    msg="Error: Unable to build ntttcp"
-    LogMsg "${msg}"
-    echo "${msg}" >> ~/summary.log
-    UpdateTestState $ICA_TESTFAILED
-    exit 100
-fi
-
-make install
-if [ $? -ne 0 ]; then
-    msg="Error: Unable to install ntttcp"
-    LogMsg "${msg}"
-    echo "${msg}" >> ~/summary.log
-    UpdateTestState $ICA_TESTFAILED
-    exit 110
-fi
-
 if [ $DISTRO -eq "suse_12" ]; then
     ldconfig
     if [ $? -ne 0 ]; then
@@ -459,33 +358,15 @@ if [ $DISTRO -eq "suse_12" ]; then
     fi
 fi
 
-# go back to test root folder
-cd ~
-
 # set static ips for test interfaces
-declare -i __iterator=0
+ config_staticip ${SERVER_IP} ${NETMASK}
+if [ $? -ne 0 ]; then
+    echo "ERROR: Function config_staticip failed."
+    LogMsg "ERROR: Function config_staticip failed."
+    UpdateTestState $ICA_TESTABORTED
+fi
 
-while [ $__iterator -lt ${#SYNTH_NET_INTERFACES[@]} ]; do
-    LogMsg "Trying to set an IP Address via static on interface ${SYNTH_NET_INTERFACES[$__iterator]}"
-    CreateIfupConfigFile "${SYNTH_NET_INTERFACES[$__iterator]}" "static" $SERVER_IP $NETMASK
-
-    if [ 0 -ne $? ]; then
-        msg="Unable to set address for ${SYNTH_NET_INTERFACES[$__iterator]} through static"
-        LogMsg "$msg"
-        UpdateSummary "$msg"
-        SetTestStateFailed
-        exit 120
-    fi
-
-    : $((__iterator++))
-
-done
-
-#
 # Start ntttcp server instances
-#
 sleep 3
-LogMsg "Ntttcp is ready to start in server mode."
-
 UpdateTestState $ICA_NTTTCPRUNNING
 LogMsg "Ntttcp server instances are now ready to run"
