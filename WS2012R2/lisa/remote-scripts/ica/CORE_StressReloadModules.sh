@@ -185,6 +185,12 @@ ifdown eth0
 ifup eth0
 VerifyModules
 
+ipAddress=$(ifconfig | grep 'inet addr:' | grep -v '127.0.0.1' | cut -d: -f2 | cut -d' ' -f1)
+if [[ ${ipAddress} -eq '' ]]; then
+    LogMsg "Waiting for interface to receive an IP"
+    sleep 30
+fi
+
 echo "Test ran for ${DIFF} seconds" >> ~/summary.log
 
 LogMsg "#########################################################"
