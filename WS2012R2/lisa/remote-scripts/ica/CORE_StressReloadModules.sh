@@ -55,7 +55,7 @@ UpdateSummary()
 
 VerifyModules()
 {
-	MODULES=~/modules.txt
+    MODULES=~/modules.txt
     lsmod | grep hv_* > $MODULES
 
     #
@@ -128,17 +128,17 @@ if [ -e ~/summary.log ]; then
 fi
 
 if [ -e $HOME/constants.sh ]; then
-	. $HOME/constants.sh
+    . $HOME/constants.sh
 else
-	LogMsg "ERROR: Unable to source the constants file."
-	UpdateTestState "TestAborted"
-	exit 1
+    LogMsg "ERROR: Unable to source the constants file."
+    UpdateTestState "TestAborted"
+    exit 1
 fi
 
 #Check for Testcase covered
 if [ ! ${TC_COVERED} ]; then
     LogMsg "Error: The TC_COVERED variable is not defined."
-	echo "Error: The TC_COVERED variable is not defined." >> ~/summary.log
+    echo "Error: The TC_COVERED variable is not defined." >> ~/summary.log
 fi
 
 echo "Covers : ${TC_COVERED}" >> ~/summary.log
