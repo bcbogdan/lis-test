@@ -43,6 +43,7 @@ class TestRun(object):
     """
     def __init__(self, skip_vm_check=False, checkpoint_name=False):
         self.suite = ''
+        self.xml_object = None
         self.timestamp = ''
         self.log_path = ''
         self.vms = dict()
@@ -53,19 +54,19 @@ class TestRun(object):
         self.checkpoint_name = checkpoint_name
 
     def update_from_xml(self, xml_path):
-        xml_object = ParseXML(xml_path)
+        self.xml_object = ParseXML(xml_path)
         logger.debug('Parsed XML file')
-        self.suite = xml_object.get_tests_suite()
+        self.suite = self.xml_object.get_tests_suite()
         logger.debug('Saving Tests Suite name - %s', self.suite)
 
-        for test_case_name, props in xml_object.get_tests().iteritems():
+        for test_case_name, props in self.xml_object.get_tests().iteritems():
             logger.debug('Initializing TestCase object for %s', test_case_name)
             self.test_cases[test_case_name] = TestCase(
                 name=test_case_name,
                 properties=props
             )
 
-        for vm_name, vm_details in xml_object.get_vms().iteritems():
+        for vm_name, vm_details in self.xml_object.get_vms().iteritems():
             logger.debug('Initializing VirtualMachine object for %s', vm_name)
             self.vms[vm_name] = VirtualMachine(
                 vm_name=vm_name,

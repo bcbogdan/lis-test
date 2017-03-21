@@ -85,7 +85,14 @@ class ParseXML(object):
                     temp_dict = ParseXML.parse_xml_section(element)
                 ParseXML.save_node(result_dict, element.tag, temp_dict, dict_default_value)
         return result_dict
-            
+
+    def remove_tests(self, to_remove):
+        root = self.root.find('testSuites').find('suite').find('suiteTests')
+        for test in root.getchildren():
+            if test.text.lower() in to_remove:
+                logger.debug('Removing {0} from XML file'.format(test.text))
+                root.remove(test)
+
     def get_tests(self):
         """Iterates through the xml file looking for <test> sections
 

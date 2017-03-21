@@ -63,6 +63,12 @@ def init_arg_parser():
         default=False,
         help="snapshot name of the virtual machine that was tested"
     )
+    arg_parser.add_argument(
+        "-r", "--rewrite",
+        default=False,
+        help="flag for rewriting the xml file at the end of the test",
+        action='store_true'
+    )
 
     return arg_parser
 
@@ -168,4 +174,3 @@ def setup_logging(
         logging.config.dictConfig(config)
     else:
         logging.basicConfig(level=level)
-0

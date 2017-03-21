@@ -30,6 +30,7 @@ import sql_utils
 import config
 from test_run import PerfTestRun
 from test_run import TestRun
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ def main(args):
     parsed_arguments = arg_parser.parse_args(args)
 
     path_validation = config.validate_input(parsed_arguments)
+    print(parsed_arguments)
+    sys.exit()
     if isinstance(path_validation, list):
         print("\n%s \n" % path_validation[1])
         print(arg_parser.parse_args(['-h']))
@@ -102,6 +105,13 @@ def main(args):
 
     logger.info("Checking insert validity")
     sql_utils.check_insert(db_cursor, insert_values)
+
+    if parsed_arguments.rewrite:
+        logger.info("Creating new XML file")
+        tests_to_skip = ['install_lis-next', 'prevss_takesnapshot', 'dependencymv_checkpoint']
+        remove_list = [item['TestCaseName'] for item in insert_values if item['TestCaseName'] not in tests_to_skip]
+        test_run.xml_object.remove_tests(remove_list)
+        test_run.xml_object.tree.write(parsed_arguments.xml_file_path)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
