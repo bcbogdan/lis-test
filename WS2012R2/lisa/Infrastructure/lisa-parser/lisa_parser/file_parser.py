@@ -29,8 +29,8 @@ import fileinput
 import zipfile
 import shutil
 import decimal
-
-
+import json
+from collections import defaultdict
 try:
     import xml.etree.cElementTree as ElementTree
 except ImportError:
@@ -52,6 +52,40 @@ class ParseXML(object):
         return self.root.find('testSuites').getchildren()[0]\
             .find('suiteName').text
 
+    def get_global_config(self):
+        """Parses the first part of a test run XML that holds genernal config info
+        
+        """
+        global_config_dict = ParseXML.parse_xml_section(self.root.find('global'))
+        print(json.dumps(global_config_dict, indent=2, sort_keys=True))
+
+    @staticmethod
+    def save_node(xml_dict, key, value, type):
+        if type is str:
+            xml_dict[key] = value
+        elif type is list:
+            xml_dict[key].append(value)
+        else:
+            logger.error('Invalid argument')
+
+    @staticmethod
+    def parse_xml_section(xml_root, dict_default_value=str):
+        """Parse an xml section into a dictionary strucutre.
+
+        """
+        result_dict = defaultdict(dict_default_value)
+        for element in xml_root.getchildren():
+            if not element.getchildren():
+                if element.text:
+                    ParseXML.save_node(result_dict, element.tag, element.text.strip(), dict_default_value)
+            else:
+                if len(element.getchildren()) > 1 and element.getchildren()[0].tag == element.getchildren()[1].tag:
+                    temp_dict = ParseXML.parse_xml_section(element, list)
+                else:
+                    temp_dict = ParseXML.parse_xml_section(element)
+                ParseXML.save_node(result_dict, element.tag, temp_dict, dict_default_value)
+        return result_dict
+            
     def get_tests(self):
         """Iterates through the xml file looking for <test> sections
 
@@ -62,7 +96,6 @@ class ParseXML(object):
             { 'testName' : {} }
         """
         tests_dict = dict()
-
         for test in self.root.iter('suiteTest'):
             tests_dict[test.text.lower()] = dict()
 
@@ -91,18 +124,18 @@ class ParseXML(object):
             if test_property.tag == 'testName':
                 continue
             elif not test_property.getchildren() and test_property.text:
-                test_dict[test_property.tag.lower()] = \
+                test_dict[test_property.tag] = \
                     test_property.text.strip().split()
             else:
-                test_dict[test_property.tag.lower()] = list()
+                test_dict[test_property.tag] = list()
                 for item in test_property.getchildren():
                     if test_property.tag.lower() == 'testparams':
                         parameter = item.text.split('=')
-                        test_dict[test_property.tag.lower()].append(
+                        test_dict[test_property.tag].append(
                             (parameter[0], parameter[1])
                         )
                     else:
-                        test_dict[test_property.tag.lower()].append(item.text)
+                        test_dict[test_property.tag].append(item.text)
 
         return test_dict
 
