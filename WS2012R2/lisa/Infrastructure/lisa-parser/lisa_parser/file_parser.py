@@ -47,6 +47,9 @@ class ParseXML(object):
     def __init__(self, file_path):
         self.tree = ElementTree.ElementTree(file=file_path)
         self.root = self.tree.getroot()
+        self.tests = [ test for test in self.root.find('testCases').getchildren() ]
+        self.vm_settings = self.root.find('VMs').getchildren()[0]
+        self.global_config = self.root.find('global')
 
     def get_tests_suite(self):
         return self.root.find('testSuites').getchildren()[0]\
@@ -77,7 +80,10 @@ class ParseXML(object):
         for element in xml_root.getchildren():
             if not element.getchildren():
                 if element.text:
-                    ParseXML.save_node(result_dict, element.tag, element.text.strip(), dict_default_value)
+                    element_value = element.text.strip()
+                else:
+                    element_value = ''
+                ParseXML.save_node(result_dict, element.tag, element_value, dict_default_value)
             else:
                 if len(element.getchildren()) > 1 and element.getchildren()[0].tag == element.getchildren()[1].tag:
                     temp_dict = ParseXML.parse_xml_section(element, list)
@@ -86,13 +92,47 @@ class ParseXML(object):
                 ParseXML.save_node(result_dict, element.tag, temp_dict, dict_default_value)
         return result_dict
 
+    @staticmethod
+    def edit_params(test_params, replace_values_dict):
+        for param in test_params:
+            param_name, value = param.text.split('=')   
+            if param_name in replace_values_dict.keys():
+                param.text = ''.join([param_name, '=', replace_values_dict[param_name]])
+
+    def edit_test_params(self, params_dict):
+        """ Edits a LISA XML test section with provided values
+
+        params_dict = { test_name: {param_name: value} }
+        """
+        for test in self.tests:
+            test_name = test.find('testName').text.strip()
+            if test_name in params_dict.keys():
+                logger.debug('Editing parameters for {0}'.format(test_name))
+                ParseXML.edit_params(test.find('testParams').getchildren(), params_dict[test_name])
+
+    def edit_vm_conf(self, vm_conf):
+        """ Edits a LISA XML VM conf section with provided values"""
+        for xml_item in self.vm_settings.getchildren():
+            if not xml_item.getchildren():
+                try:
+                    xml_item.text = vm_conf[xml_item.tag]
+                except KeyError:
+                    logger.debug('%s was not found in provided config' % xml_item.tag)
+            elif xml_item.tag == 'testParams':
+                for param in xml_item.getchildren():
+                    param_name, param_value = param.text.split('=')
+                    try:
+                        param.text = '='.join([param_name, vm_conf['testParams'][param_name]])
+                    except KeyError:
+                        logger.debug('%s was not found in config dict' % param_name)
+
     def remove_tests(self, to_remove):
         root = self.root.find('testSuites').find('suite').find('suiteTests')
         for test in root.getchildren():
             if test.text.lower() in to_remove:
                 logger.debug('Removing {0} from XML file'.format(test.text))
                 root.remove(test)
-
+    
     def get_tests(self):
         """Iterates through the xml file looking for <test> sections
 
