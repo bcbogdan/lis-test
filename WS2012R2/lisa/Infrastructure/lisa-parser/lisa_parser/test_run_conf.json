@@ -1,0 +1,26 @@
+{
+    "tests": {
+        "run": [""],
+        "skip": [""]
+    },
+    "vms": {
+        "main": {
+            "name": "",
+            "server": "",
+            "vhdPath": "",
+            "switchName": "",
+            "memory": "",
+            "generation": 1
+        },
+        "dependency": {}
+    },
+    "testsConfig": {
+        "sshKey": "",
+        "snapshotName": "",
+        "testParams": {
+            "snapshotName": "icabase"
+        },
+        "driveLetter": ""
+    },
+    "processes": 4
+}

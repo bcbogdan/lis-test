@@ -115,16 +115,18 @@ class ParseXML(object):
         for xml_item in self.vm_settings.getchildren():
             if not xml_item.getchildren():
                 try:
+                    logger.debug('Using %s as %s' % (xml_item.tag, vm_conf[xml_item.tag]))
                     xml_item.text = vm_conf[xml_item.tag]
                 except KeyError:
-                    logger.debug('%s was not found in provided config' % xml_item.tag)
+                    pass
             elif xml_item.tag == 'testParams':
                 for param in xml_item.getchildren():
                     param_name, param_value = param.text.split('=')
                     try:
+                        logger.debug('Using %s as %s' % (param_name, vm_conf['testParams'][param_name]))
                         param.text = '='.join([param_name, vm_conf['testParams'][param_name]])
                     except KeyError:
-                        logger.debug('%s was not found in config dict' % param_name)
+                        pass
 
     def remove_tests(self, to_remove):
         root = self.root.find('testSuites').find('suite').find('suiteTests')

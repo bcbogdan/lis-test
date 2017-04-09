@@ -36,7 +36,7 @@ class VirtualMachine(object):
     vm.
     """
 
-    def __init__(self, vm_name, hv_server, os=None, host_os=None, checkpoint_name='icabase', check=True):
+    def __init__(self, vm_name, hv_server, os=None, host_os=None, checkpoint_name='icabase', check=True, create_params=None):
         self.vm_name = vm_name
         self.hv_server = hv_server
         self.os = os
@@ -47,6 +47,26 @@ class VirtualMachine(object):
         """Check if VM exists"""
         if check:
             self.check_if_exists()
+    
+    @staticmethod
+    def create_vm(vm_name, vhd_path, switch_name, hv_server='localhost', mem_size='1GB'):
+        logger.debug(
+            'Creating VM with the following parameters: %s %s %s %s %s' % (vm_name, vhd_path, switch_name, hv_server, mem_size)
+            )
+        VirtualMachine.execute_command([
+            'powershell', 'New-VM', '-Name', vm_name, '-ComputerName', hv_server,
+            '-VHDPath', vhd_path,  '-SwitchName', switch_name, 
+            '-MemoryStartupBytes', mem_size
+        ])
+
+    @staticmethod
+    def create_checkpoint(vm_name, hv_server, checkpoint_name):
+        logger.debug('Creating checkpoint %s for %s on %s' % (checkpoint_name, vm_name, hv_server))
+        VirtualMachine.execute_command([
+            'powershell', 'Checkpoint-VM', '-Name', vm_name,
+            '-ComputerName', hv_server,
+            '-SnapshotName', checkpoint_name
+        ])
 
     def check_if_exists(self):
         self.invoke_ps_command(
@@ -217,4 +237,3 @@ class VirtualMachine(object):
             )
         else:
             return stdout_data
-0
