@@ -26,14 +26,12 @@ from time import sleep
 from config import setup_logging
 from lisa_parser import main
 import json
-import shutil
 import multiprocessing
 import Queue
 import logging
 import os
 import ntpath
 import sys
-import pdb
 
 logger = logging.getLogger(__name__)
 
@@ -187,61 +185,92 @@ class RunLISA(object):
                     ), vm_base_name=vm_config['dependency']['name'])
         except KeyError:
             logger.debug('No dependency vm info found')
+        logger.debug('Created vms - %s' % vms)
 
         work_folder = os.path.join(main_lisa_path, 'test_run')
         if os.path.exists(work_folder):
             VirtualMachine.execute_command(['powershell', 'Remove-Item','-Recurse', '-Force', work_folder])
         os.mkdir(work_folder)
         lisa_list = RunLISA.copy_lisa_folder(main_lisa_path, work_folder, count=pool_count)
+        logger.debug('LISA folders list - %s' % lisa_list)
 
         return  main_lisa_path, vms, lisa_list
 
 
+def validate_config(config_dict):
+    missing_filed = ''
+    if 'tests' not in config_dict.keys():
+        missing_filed = 'tests'
+    elif 'vms' not in config_dict.keys():
+        missing_filed = 'vms'
+    elif 'testsConfig' not in config_dict.keys():
+        missing_filed = 'testsConfig'
+    
+    if missing_filed:
+        logger.error('Field %s not found' % missing_filed)
+        logger.error('Look over the demo config file for more details')
+        return False
+    else:
+        return True
+
+
 if __name__ == '__main__':
     setup_logging(default_level=3)
+    
+    config_file_path = r'.\\lisa_parser\\test_run_conf.json'
+    if len(sys.argv) == 2:
+        config_file_path  = sys.argv[1]
+            
+    if not os.path.exists(config_file_path):
+        logger.error('Specified config file not found - %s' %  config_file_path)
+        sys.exit(1)
 
-    logging.info(os.getcwd())
-    with open(r'.\\lisa_parser\\test_run_conf.json') as config_data:
+    with open(config_file_path) as config_data:
         config_dict = json.load(config_data)
+        if not validate_config(config_dict):
+            sys.exit(1)
     
     pool_count = 4
-
     try:
         pool_count = int(config_dict['processes'])
     except KeyError:
         logger.info('Processes field not provided. Defaulting to %d' % pool_count)
         
     main_lisa_path, vms, lisa_folders = RunLISA.setup_lisa_run(config_dict['vms'], pool_count=pool_count, snapshot_name=config_dict['testsConfig']['testParams']['snapshotName'])
-    
-    
+
     proc_manager = multiprocessing.Manager()
     vms_queue = proc_manager.Queue()
     lisa_queue = proc_manager.Queue()
     
+
     for i in range(pool_count):
         vms_queue.put(vms[i])
         lisa_queue.put(lisa_folders[i])
     
+    logger.info('Creating the tests list')
     xml_list = RunLISA.create_test_list(config_dict['tests'], os.path.join(main_lisa_path, 'xml'))
 
     # Check for logPath
     try:
         logPath = config_dict['testsConfig']['logPath']
+        logger.debug('Using %s for tests log output' % logPath)
     except KeyError:
         logPath = os.path.join(main_lisa_path, 'TestResults')
         logger.debug('Log path was not specified for %s. Using default path' % xml_path)
     
-    
+    logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['testsConfig'], main_lisa_path), xml_list)
 
+    logger.info('Test run completed')
     # Parse results if specified
     if 'parseResults' in config_dict:
+        logger.info('Parsing results')
+        logger.debug('Using the following paths - %s' % result)
         parser_args = ["xml_file", "ica_log_file"]
         for key, value in config_dict['parseResults'].iteritems():
             parser_args.append(key)
             parser_args.append(value)
-        
         for xml_path, log_path in result:    
             parser_args[0] = xml_path
             parser_args[1] = os.path.join(log_path, 'ica.log')
