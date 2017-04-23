@@ -51,11 +51,12 @@ class RunLISA(object):
         'STOR_VSS_Backup_Tests.xml', 'StressTests.xml', 'VMBus_Tests.xml', 'lsvmbus.xml'
     ]
 
-    def __init__(self, lisa_path_queue, vm_queue, tests_config, lisa_path):
+    def __init__(self, lisa_path_queue, vm_queue, tests_config, lisa_path, lisa_params):
         self.lisa_queue = lisa_path_queue
         self.vm_queue = vm_queue
         self.config = tests_config
         self.main_lisa_path = lisa_path
+        self.params = lisa_params
 
     def __call__(self, xml_dict):
         logger.info('Editing %s' % xml_dict['name'])
@@ -77,9 +78,11 @@ class RunLISA(object):
         lisa_path = self.lisa_queue.get()
         os.chdir(lisa_path)
         lisa_bin = os.path.join(lisa_path, 'lisa.ps1')
+        lisa_cmd_list = ['powershell', lisa_bin, 'run', xml_dict['path']]
+        lisa_cmd_list.extend(self.params)
         logger.info('Running %s on %s with %s' % (xml_dict['path'], vm_name, lisa_path))
         try:
-            VirtualMachine.execute_command(['powershell', lisa_bin, 'run', xml_dict['path'], '-dbgLevel', '5'])
+            VirtualMachine.execute_command(lisa_cmd_list)
             # Get ica log path
             logFolders = [ dir for dir in self.config['logPath'] if xml_obj.get_tests_suite() in dir ]
             result = (xml_dict['path'], max(logFolders, key=os.path.getmtime))
@@ -259,7 +262,7 @@ if __name__ == '__main__':
     except KeyError:
         logger.info('Processes field not provided. Defaulting to %d' % pool_count)
         
-    main_lisa_path, vms, lisa_folders = RunLISA.setup_lisa_run(config_dict['vms'], pool_count=pool_count, snapshot_name=config_dict['testsConfig']['testParams']['snapshotName'])
+    main_lisa_path, vms, lisa_folders = RunLISA.setup_lisa_run(config_dict['vms'], pool_count=pool_count, snapshot_name=config_dict['generalConfig']['testParams']['snapshotName'])
 
     proc_manager = multiprocessing.Manager()
     vms_queue = proc_manager.Queue()
@@ -275,15 +278,21 @@ if __name__ == '__main__':
 
     # Check for logPath
     try:
-        logPath = config_dict['testsConfig']['logPath']
+        logPath = config_dict['generalConfig']['logPath']
         logger.debug('Using %s for tests log output' % logPath)
     except KeyError:
         logPath = os.path.join(main_lisa_path, 'TestResults')
         logger.debug('Log path was not specified for %s. Using default path' % xml_path)
     
+    try:
+        lisa_params = config_dict['lisaParams']
+    except KeyError:
+        lisa_params = []
+        logger.info('No extra params for LISA run have been specified')
+
     logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
-    result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['testsConfig'], main_lisa_path), xml_list)
+    result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['generalConfig'], main_lisa_path, lisa_params), xml_list)
 
     logger.info('Test run completed')
     # Parse results if specified
