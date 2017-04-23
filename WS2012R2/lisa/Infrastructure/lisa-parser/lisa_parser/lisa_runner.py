@@ -3,6 +3,7 @@ from virtual_machine import VirtualMachine
 from file_parser import ParseXML
 from envparse import env
 import shutil
+from time import sleep
 from config import setup_logging
 import multiprocessing
 import Queue
@@ -51,14 +52,13 @@ class RunLISA(object):
         xml_obj.tree.write(xml_path)
         lisa_path = self.lisa_queue.get()
         os.chdir(lisa_path)
-        print(os.getcwd())
-        print(xml_path)
         lisa_bin = os.path.join(lisa_path, 'lisa.ps1')
         logger.info('Running %s on %s with %s' % (xml_path, vm_name, lisa_path))
         try:
             VirtualMachine.execute_command(['powershell', lisa_bin, 'run', xml_path, '-dbgLevel', '5'])
         except RuntimeError:
             logger.error('Test run exited with errors')
+        sleep(60)
         self.vm_queue.put(vm_name)
         self.lisa_queue.put(lisa_path)
 
@@ -147,28 +147,28 @@ class RunLISA(object):
         main_lisa_path = RunLISA.get_lisa_path()
         logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
 
-        work_folder = os.path.join(main_lisa_path, 'test_run')
-        if os.path.exists(work_folder):
-            VirtualMachine.execute_command(['powershell', 'Remove-Item','-Recurse', '-Force', work_folder])
-        os.mkdir(work_folder)
+        try:
+            vhd_folder = vm_config['main']['vhdPath']
+        except KeyError:
+            vhd_folder = VirtualMachine.get_default_vhd_path()
+            logger.info('No vhdFolder parameter provided. Defaulting to %s' % vhd_folder)
 
-        vhd_destination_folder = os.path.join(work_folder, 'vhds')
-        if not os.path.exists(vhd_destination_folder):
-            os.makedirs(vhd_destination_folder)
-
-        vms = {}
         vms['main'] = RunLISA.create_vms(
             RunLISA.copy_multiple_times(
-                vm_config['main']['vhdPath'], vhd_destination_folder, count=pool_count
+                vm_config['main']['vhdPath'], vhd_folder, count=pool_count
                 ), vm_base_name=vm_config['main']['name'])
         try:
             vms['dependency'] = RunLISA.create_vms(
                 RunLISA.copy_multiple_times(
-                    vm_config['dependency']['vhdPath'], vhd_destination_folder
+                    vm_config['dependency']['vhdPath'], vhd_folder
                     ), vm_base_name=vm_config['dependency']['name'])
         except KeyError:
             logger.debug('No dependency vm info found')
 
+        work_folder = os.path.join(main_lisa_path, 'test_run')
+        if os.path.exists(work_folder):
+            VirtualMachine.execute_command(['powershell', 'Remove-Item','-Recurse', '-Force', work_folder])
+        os.mkdir(work_folder)
         lisa_list = RunLISA.copy_lisa_folder(main_lisa_path, work_folder, count=pool_count)
 
         return  main_lisa_path, vms, lisa_list

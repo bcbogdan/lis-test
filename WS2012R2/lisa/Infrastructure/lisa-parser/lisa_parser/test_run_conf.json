@@ -22,5 +22,8 @@
         },
         "driveLetter": ""
     },
+    "lisaParams": {
+        
+    },
     "processes": 4
 }

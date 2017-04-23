@@ -161,7 +161,11 @@ class VirtualMachine(object):
                 continue
 
         return vm_info
-
+    
+    @staticmethod
+    def get_default_vhd_path():
+        return VirtualMachine.execute_command(['powershel', '$(Get-VMhost).VirtualHardDiskPath'])
+        
     def invoke_ps_command(self, cmd_type):
         cmd_args = [
             'powershell', 'cmd', '-Name', self.vm_name, '-ComputerName',
