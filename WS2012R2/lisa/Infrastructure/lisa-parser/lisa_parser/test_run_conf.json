@@ -14,13 +14,21 @@
         },
         "dependency": {}
     },
-    "testsConfig": {
+    "generalConfig": {
         "sshKey": "",
         "snapshotName": "",
         "testParams": {
             "snapshotName": "icabase"
         },
         "driveLetter": ""
+    },
+    "testsConfig": {
+        "xml_name": {
+            "skip": [],
+            "params": {
+                "testName": {"param_name": "value"}
+            }
+        }
     },
     "lisaParams": {
 

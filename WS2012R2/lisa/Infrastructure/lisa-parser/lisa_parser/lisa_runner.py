@@ -25,6 +25,7 @@ from envparse import env
 from time import sleep
 from config import setup_logging
 from lisa_parser import main
+from collections import defaultdict
 import json
 import multiprocessing
 import Queue
@@ -56,49 +57,71 @@ class RunLISA(object):
         self.config = tests_config
         self.main_lisa_path = lisa_path
 
-    def __call__(self, xml_path):
-        logger.info('Editing %s' % xml_path)
+    def __call__(self, xml_dict):
+        logger.info('Editing %s' % xml_dict['name'])
         vm_name = self.vm_queue.get()
         self.config['vmName'] = vm_name
-        xml_obj = ParseXML(xml_path)
+        xml_obj = ParseXML(xml_dict['path'])
         xml_obj.edit_vm_conf(self.config)
         xml_obj.global_config.find('logfileRootDir').text = self.config['logPath']
-        xml_obj.tree.write(xml_path)
-        
+        try:
+            xml_obj.remove_tests(xml_dict['skip'])
+        except KeyError:
+            logger.debug('No tests will be removed')
+        try:
+            xml_obj.edit_test_params(xml_dict['params'])
+        except KeyError:
+            logger.debug('No parameters to edit')
+        xml_obj.tree.write(xml_dict['path'])
+
         lisa_path = self.lisa_queue.get()
         os.chdir(lisa_path)
         lisa_bin = os.path.join(lisa_path, 'lisa.ps1')
-        logger.info('Running %s on %s with %s' % (xml_path, vm_name, lisa_path))
+        logger.info('Running %s on %s with %s' % (xml_dict['path'], vm_name, lisa_path))
         try:
-            VirtualMachine.execute_command(['powershell', lisa_bin, 'run', xml_path, '-dbgLevel', '5'])
+            VirtualMachine.execute_command(['powershell', lisa_bin, 'run', xml_dict['path'], '-dbgLevel', '5'])
+            # Get ica log path
+            logFolders = [ dir for dir in self.config['logPath'] if xml_obj.get_tests_suite() in dir ]
+            result = (xml_dict['path'], max(logFolders, key=os.path.getmtime))
         except RuntimeError:
             logger.error('Test run exited with errors')
+            result = False
         
-        # Get ica log path
-        logFolders = [ dir for dir in self.config['logPath'] if xml_obj.get_tests_suite() in dir ]
-        log_dir = max(logFolders, key=os.path.getmtime)
         sleep(60)
         
         self.vm_queue.put(vm_name)
         self.lisa_queue.put(lisa_path)
-        return xml_path, log_dir
+        return result
 
     @staticmethod
-    def create_test_list(test_config_dict, lisa_abs_xml_path):
-
-        if 'run' in test_config_dict.keys():
+    def create_test_list(xml_dict, lisa_abs_xml_path, tests_config=False):
+        if 'run' in xml_dict.keys():
             xml_list = [
-                os.path.join(lisa_abs_xml_path, xml_file) for xml_file in test_config_dict['run'] if xml_file in RunLISA.xml_files
+                { 'name': xml_file } for xml_file in xml_dict['run'] if xml_file in RunLISA.xml_files
                 ]
-        elif 'skip' in test_config_dict.keys():
+        elif 'skip' in xml_dict.keys():
             xml_list = [
-                os.path.join(lisa_abs_xml_path, xml_file) for xml_file in RunLISA.xml_files if xml_file not in test_config_dict['skip']
+                { 'name': xml_file } for xml_file in RunLISA.xml_files if xml_file not in xml_dict['skip']
                 ]
         else:
             xml_list = [
-                os.path.join(lisa_abs_xml_path, xml_file) for xml_file in RunLISA.xml_files
+                { 'name': xml_file } for xml_file in RunLISA.xml_files
                 ]
 
+        if tests_config:
+            for xml_dict in xml_list:
+                xml_name = xml_dict['name']
+                try:
+                    xml_dict = tests_config[xml_name]
+                    xml_dict['name'] = xml_name
+                except KeyError:
+                    logger.debug('No extra config found for %s' % xml_dict['name'])
+                
+                xml_dict['path'] = os.path.join(lisa_abs_xml_path, xml_dict['name'])
+        else:
+            for xml_dict in xml_list:
+                xml_dict['path'] = os.path.join(lisa_abs_xml_path, xml_dict['name'])
+ 
         return xml_list
 
     @staticmethod
@@ -203,8 +226,8 @@ def validate_config(config_dict):
         missing_filed = 'tests'
     elif 'vms' not in config_dict.keys():
         missing_filed = 'vms'
-    elif 'testsConfig' not in config_dict.keys():
-        missing_filed = 'testsConfig'
+    elif 'generalConfig' not in config_dict.keys():
+        missing_filed = 'generalConfig'
     
     if missing_filed:
         logger.error('Field %s not found' % missing_filed)
@@ -271,7 +294,8 @@ if __name__ == '__main__':
         for key, value in config_dict['parseResults'].iteritems():
             parser_args.append(key)
             parser_args.append(value)
-        for xml_path, log_path in result:    
-            parser_args[0] = xml_path
-            parser_args[1] = os.path.join(log_path, 'ica.log')
-            main(parser_args)
+        for paths_tuple in result:
+            if path_tuple:
+                parser_args[0] = path_tuple[0]
+                parser_args[1] = os.path.join(path_tuple[1], 'ica.log')
+                main(parser_args)
