@@ -1,10 +1,32 @@
-import json
+"""
+Linux on Hyper-V and Azure Test Code, ver. 1.0.0
+Copyright (c) Microsoft Corporation
+
+All rights reserved
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+See the Apache Version 2.0 License for specific language governing
+permissions and limitations under the License.
+"""
+
 from virtual_machine import VirtualMachine
 from file_parser import ParseXML
 from envparse import env
-import shutil
 from time import sleep
 from config import setup_logging
+from lisa_parser import main
+import json
+import shutil
 import multiprocessing
 import Queue
 import logging
@@ -53,9 +75,15 @@ class RunLISA(object):
             VirtualMachine.execute_command(['powershell', lisa_bin, 'run', xml_path, '-dbgLevel', '5'])
         except RuntimeError:
             logger.error('Test run exited with errors')
+        
+        # Get ica log path
+        logFolders = [ dir for dir in self.config['logPath'] if xml_obj.get_tests_suite() in dir ]
+        log_dir = max(logFolders, key=os.path.getmtime)
         sleep(60)
+        
         self.vm_queue.put(vm_name)
         self.lisa_queue.put(lisa_path)
+        return xml_path, log_dir
 
     @staticmethod
     def create_test_list(test_config_dict, lisa_abs_xml_path):
@@ -206,3 +234,15 @@ if __name__ == '__main__':
     
     proc = multiprocessing.Pool(pool_count)
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['testsConfig'], main_lisa_path), xml_list)
+
+    # Parse results if specified
+    if 'parseResults' in config_dict:
+        parser_args = ["xml_file", "ica_log_file"]
+        for key, value in config_dict['parseResults'].iteritems():
+            parser_args.append(key)
+            parser_args.append(value)
+        
+        for xml_path, log_path in result:    
+            parser_args[0] = xml_path
+            parser_args[1] = os.path.join(log_path, 'ica.log')
+            main(parser_args)

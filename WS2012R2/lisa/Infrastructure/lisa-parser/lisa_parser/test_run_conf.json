@@ -27,9 +27,6 @@
     },
     "processes": 4,
     "parseResults": {
-        "envFile": "",
-        "params": {
-            
-        }
+        // lisa parser params as key: value - "--config": "config_file_path"
     }
 }
