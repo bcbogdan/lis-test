@@ -23,7 +23,13 @@
         "driveLetter": ""
     },
     "lisaParams": {
-        
+
     },
-    "processes": 4
+    "processes": 4,
+    "parseResults": {
+        "envFile": "",
+        "params": {
+            
+        }
+    }
 }

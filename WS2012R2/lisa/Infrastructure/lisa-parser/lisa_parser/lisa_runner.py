@@ -42,14 +42,9 @@ class RunLISA(object):
         self.config['vmName'] = vm_name
         xml_obj = ParseXML(xml_path)
         xml_obj.edit_vm_conf(self.config)
-
-        try:
-            xml_obj.global_config.find('logfileRootDir').text = self.config['logPath']
-        except KeyError:
-            xml_obj.global_config.find('logfileRootDir').text = os.path.join(self.main_lisa_path, 'TestResults')
-            logger.debug('Log path was not specified for %s. Using default path' % xml_path)
-        
+        xml_obj.global_config.find('logfileRootDir').text = self.config['logPath']
         xml_obj.tree.write(xml_path)
+        
         lisa_path = self.lisa_queue.get()
         os.chdir(lisa_path)
         lisa_bin = os.path.join(lisa_path, 'lisa.ps1')
@@ -201,5 +196,13 @@ if __name__ == '__main__':
     
     xml_list = RunLISA.create_test_list(config_dict['tests'], os.path.join(main_lisa_path, 'xml'))
 
+    # Check for logPath
+    try:
+        logPath = config_dict['testsConfig']['logPath']
+    except KeyError:
+        logPath = os.path.join(main_lisa_path, 'TestResults')
+        logger.debug('Log path was not specified for %s. Using default path' % xml_path)
+    
+    
     proc = multiprocessing.Pool(pool_count)
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['testsConfig'], main_lisa_path), xml_list)
