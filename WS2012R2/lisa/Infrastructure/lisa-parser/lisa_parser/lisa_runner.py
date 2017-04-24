@@ -38,8 +38,6 @@ logger = logging.getLogger(__name__)
 
 # TODO
 # multiprocessing logging - config logging for each process
-# argument parser - config file path, skip setup 
-# edit individual test params
 # add documentation
 
 class RunLISA(object):
@@ -252,10 +250,15 @@ if __name__ == '__main__':
         sys.exit(1)
 
     with open(config_file_path) as config_data:
-        config_dict = json.load(config_data)
-        if not validate_config(config_dict):
+        try:
+            config_dict = json.load(config_data)
+            if not validate_config(config_dict):
+                sys.exit(1)
+        except ValueError as json_error:
+            logger.error('Invalid JSON file')
+            logger.error('Error info - %s' % json_error)
             sys.exit(1)
-    
+        
     pool_count = 4
     try:
         pool_count = int(config_dict['processes'])
