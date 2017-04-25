@@ -50,6 +50,7 @@ class ParseXML(object):
         self.tests = [ test for test in self.root.find('testCases') ]
         self.vm_settings = self.root.find('VMs').getchildren()[0]
         self.global_config = self.root.find('global')
+        self.suite_tests = self.root.find('testSuites').getchildren()[0].find('suiteTests')
 
     def get_tests_suite(self):
         return self.root.find('testSuites').getchildren()[0]\
@@ -61,6 +62,43 @@ class ParseXML(object):
         """
         global_config_dict = ParseXML.parse_xml_section(self.root.find('global'))
         print(json.dumps(global_config_dict, indent=2, sort_keys=True))
+    
+    def insert_test(self, test_dict, position=0):
+        """ Insert a new test in a LISA XML at a specific position
+
+        @param test_dict - a dictionary matching the structure of a LISA suiteTest.
+        The key represents the xml tag name and for the value: string, dictionary (for inner elements),
+        or list (for sections with same tag names - <param></param>)
+
+        @param position - position where the new test case should be inserted
+        """
+        test_name = test_dict['testName']
+        test_name_element = ElementTree.TreeBuilder()
+        self.build_element(test_name_element, 'testName', test_name)
+        test_name_root = test_name_element.close()
+        self.suite_tests.insert(position, test_name_root)
+
+        test_details_element = ElementTree.TreeBuilder()
+        self.build_element(test_details_element, 'test', test_dict)
+        test_details_root = test_details_element.close()
+        self.root.find('testCases').insert(position, test_details_root) 
+    
+    @staticmethod
+    def build_element(builder, tag_value, field_value):
+        if type(field_value) is str:
+            builder.start(tag_value)
+            builder.data(field_value)
+            builder.end(tag_value)
+        elif type(field_value) is list:
+            for value in field_value:
+                builder.start(tag_value)
+                builder.data(value)
+                builder.end(tag_value)
+        elif type(field_value) is dict:
+            builder.start(tag_value)
+            for inner_tag, inner_value in field_value.iteritems():
+                ParseXML.build_element(builder, inner_tag, inner_value)
+            builder.end(tag_value)
 
     @staticmethod
     def save_node(xml_dict, key, value, type):
