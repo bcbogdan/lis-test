@@ -47,7 +47,7 @@ class ParseXML(object):
     def __init__(self, file_path):
         self.tree = ElementTree.ElementTree(file=file_path)
         self.root = self.tree.getroot()
-        self.tests = [ test for test in self.root.find('testCases').getchildren() ]
+        self.tests = [ test for test in self.root.find('testCases') ]
         self.vm_settings = self.root.find('VMs').getchildren()[0]
         self.global_config = self.root.find('global')
 
@@ -104,11 +104,16 @@ class ParseXML(object):
 
         params_dict = { test_name: {param_name: value} }
         """
+        logger.info('Updating test xml with the following params %s' % params_dict)
         for test in self.tests:
             test_name = test.find('testName').text.strip()
             if test_name in params_dict.keys():
                 logger.debug('Editing parameters for {0}'.format(test_name))
-                ParseXML.edit_params(test.find('testParams').getchildren(), params_dict[test_name])
+                try:
+                    test_params = test.find('testParams').getchildren()
+                except AttributeError:
+                    test_params = test.find('testparams').getchildren() 
+                ParseXML.edit_params(test_params, params_dict[test_name])
 
     def edit_vm_conf(self, vm_conf):
         """ Edits a LISA XML VM conf section with provided values"""
@@ -131,7 +136,7 @@ class ParseXML(object):
     def remove_tests(self, to_remove):
         root = self.root.find('testSuites').find('suite').find('suiteTests')
         for test in root.getchildren():
-            if test.text.lower() in to_remove:
+            if test.text in to_remove:
                 logger.debug('Removing {0} from XML file'.format(test.text))
                 root.remove(test)
     

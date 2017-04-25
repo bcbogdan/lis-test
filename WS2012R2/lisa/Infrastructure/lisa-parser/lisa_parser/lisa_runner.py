@@ -26,6 +26,7 @@ from time import sleep
 from config import setup_logging
 from lisa_parser import main
 from collections import defaultdict
+
 import json
 import multiprocessing
 import Queue
@@ -35,9 +36,11 @@ import ntpath
 import sys
 
 logger = logging.getLogger(__name__)
-
+proc_logger = multiprocessing.get_logger()
 # TODO
 # multiprocessing logging - config logging for each process
+# argument parser - config file path, skip setup 
+# edit individual test params
 # add documentation
 
 class RunLISA(object):
@@ -57,7 +60,7 @@ class RunLISA(object):
         self.params = lisa_params
 
     def __call__(self, xml_dict):
-        logger.info('Editing %s' % xml_dict['name'])
+        proc_logger.info('Editing %s' % xml_dict['name'])
         vm_name = self.vm_queue.get()
         self.config['vmName'] = vm_name
         xml_obj = ParseXML(xml_dict['path'])
@@ -66,11 +69,12 @@ class RunLISA(object):
         try:
             xml_obj.remove_tests(xml_dict['skip'])
         except KeyError:
-            logger.debug('No tests will be removed')
+            proc_logger.debug('No tests will be removed')
         try:
             xml_obj.edit_test_params(xml_dict['params'])
         except KeyError:
-            logger.debug('No parameters to edit')
+            proc_logger.debug('No parameters to edit')
+
         xml_obj.tree.write(xml_dict['path'])
 
         lisa_path = self.lisa_queue.get()
@@ -78,14 +82,19 @@ class RunLISA(object):
         lisa_bin = os.path.join(lisa_path, 'lisa.ps1')
         lisa_cmd_list = ['powershell', lisa_bin, 'run', xml_dict['path']]
         lisa_cmd_list.extend(self.params)
-        logger.info('Running %s on %s with %s' % (xml_dict['path'], vm_name, lisa_path))
+        proc_logger.info('Running the following LISA command - %s' % ' '.join(lisa_cmd_list))
         try:
-            VirtualMachine.execute_command(lisa_cmd_list)
+            lisa_output = VirtualMachine.execute_command(lisa_cmd_list)
+            with open(os.path.join(self.main_lisa_path, xml_dict['name'] +'.log'), 'w') as log_file:
+                log_file.write(lisa_output) 
             # Get ica log path
             logFolders = [ dir for dir in self.config['logPath'] if xml_obj.get_tests_suite() in dir ]
-            result = (xml_dict['path'], max(logFolders, key=os.path.getmtime))
-        except RuntimeError:
-            logger.error('Test run exited with errors')
+            proc_logger.info(logFolders)
+            #result = (xml_dict['path'], max(logFolders, key=os.path.getmtime))
+            result = (xml_dict['path'],  logFolders)
+        except RuntimeError as lisa_error:
+            proc_logger.error('Test run exited with errors')
+            proc_logger.error(lisa_error)
             result = False
         
         sleep(60)
@@ -111,17 +120,16 @@ class RunLISA(object):
 
         if tests_config:
             for xml_dict in xml_list:
-                xml_name = xml_dict['name']
                 try:
-                    xml_dict = tests_config[xml_name]
-                    xml_dict['name'] = xml_name
+                    xml_dict.update(tests_config[xml_dict['name']])
                 except KeyError:
                     logger.debug('No extra config found for %s' % xml_dict['name'])
-                
                 xml_dict['path'] = os.path.join(lisa_abs_xml_path, xml_dict['name'])
+                logger.debug('Processed xml - %s', xml_dict)
         else:
             for xml_dict in xml_list:
                 xml_dict['path'] = os.path.join(lisa_abs_xml_path, xml_dict['name'])
+                logger.debug('Processed xml - %s', xml_dict)
  
         return xml_list
 
@@ -145,6 +153,8 @@ class RunLISA(object):
         index = 1
         for vhd_path in vhd_path_list:
             vm_name = ''.join([vm_base_name, str(index)])
+            # Create VM fails for folders that contain spaces
+            vhd_path = ''.join(["\"", vhd_path, "\""])
             VirtualMachine.create_vm(vm_name, vhd_path, switch_name, hv_server, mem_size)
             VirtualMachine.create_checkpoint(vm_name, hv_server, checkpoint)
             vm_list.append(vm_name)
@@ -156,6 +166,7 @@ class RunLISA(object):
     def copy_multiple_times(source_path, destination_folder, count=1):
         path_list = []
         base_name_list = ntpath.basename(source_path).split('.')
+        logger.debug('%s' % base_name_list)
         for index in range(count):
             item_name = ''.join([base_name_list[0], str(index + 1)])
             if len(base_name_list) > 1:
@@ -163,45 +174,38 @@ class RunLISA(object):
             else:
                 destination_path = os.path.join(destination_folder, item_name)
             logger.debug('Copying %s to %s' % (source_path, destination_path))
-            VirtualMachine.execute_command(['powershell', 'Copy-Item',  '-Recurse', source_path, destination_path])
+            VirtualMachine.execute_command(['powershell', 'Copy-Item', source_path, destination_path])
             path_list.append(destination_path)
 
         return path_list
 
     @staticmethod
     def copy_lisa_folder(main_lisa_path, work_folder, count=1):
-        work_lisa_path = os.path.join(work_folder, 'lisa')
-        if not os.path.exists(work_lisa_path):
-            os.mkdir(work_lisa_path)
-
-        for item_path in os.listdir(main_lisa_path):
-            full_path = os.path.join(main_lisa_path, item_path)
-            if os.path.normpath(full_path) != os.path.normpath(work_folder):
-                VirtualMachine.execute_command(['powershell', 'Copy-Item', full_path, work_lisa_path, '-recurse'])
-
-        if count > 1:
-            lisa_list = RunLISA.copy_multiple_times(work_lisa_path, work_folder, count=count-1)
-            lisa_list.append(work_lisa_path)
-            return lisa_list
-        else:
-            return [work_lisa_path]
+        result_list = []
+        for index in range(count):
+            work_lisa_path = os.path.join(work_folder, 'lisa' + str(index))
+            result_list.append(work_lisa_path)
+            if not os.path.exists(work_lisa_path):
+                os.mkdir(work_lisa_path)
+            for item_path in os.listdir(main_lisa_path):
+                full_path = os.path.join(main_lisa_path, item_path)
+                if os.path.normpath(full_path) != os.path.normpath(work_folder):
+                    VirtualMachine.execute_command(['powershell', 'Copy-Item', full_path, work_lisa_path, '-recurse'])
+        return result_list
 
     @staticmethod
     def setup_lisa_run(vm_config, pool_count=4, snapshot_name='icabase'):
         logger.debug('Running test run setup with - %s' % vm_config)
         main_lisa_path = RunLISA.get_lisa_path()
         logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
-
+        vms = {}
         try:
-            vhd_folder = vm_config['main']['vhdPath']
+            vhd_folder = vm_config['main']['vhdDestinationPath']
         except KeyError:
             vhd_folder = VirtualMachine.get_default_vhd_path()
             logger.info('No vhdFolder parameter provided. Defaulting to %s' % vhd_folder)
-
-        vms['main'] = RunLISA.create_vms(
-            RunLISA.copy_multiple_times(
-                vm_config['main']['vhdPath'], vhd_folder, count=pool_count
-                ), vm_base_name=vm_config['main']['name'])
+        vhd_list = ["F:\\Hyper-V\\Virtual hard disks\\rhel73_x641.vhdx", "F:\\Hyper-V\\Virtual hard disks\\rhel73_x642.vhdx", "F:\\Hyper-V\\Virtual hard disks\\rhel73_x643.vhdx", "F:\\Hyper-V\\Virtual hard disks\\rhel73_x644.vhdx"]
+        vms['main'] = RunLISA.create_vms(vhd_list, vm_base_name=vm_config['main']['name'])
         try:
             vms['dependency'] = RunLISA.create_vms(
                 RunLISA.copy_multiple_times(
@@ -250,15 +254,10 @@ if __name__ == '__main__':
         sys.exit(1)
 
     with open(config_file_path) as config_data:
-        try:
-            config_dict = json.load(config_data)
-            if not validate_config(config_dict):
-                sys.exit(1)
-        except ValueError as json_error:
-            logger.error('Invalid JSON file')
-            logger.error('Error info - %s' % json_error)
+        config_dict = json.load(config_data)
+        if not validate_config(config_dict):
             sys.exit(1)
-        
+
     pool_count = 4
     try:
         pool_count = int(config_dict['processes'])
@@ -270,11 +269,11 @@ if __name__ == '__main__':
     proc_manager = multiprocessing.Manager()
     vms_queue = proc_manager.Queue()
     lisa_queue = proc_manager.Queue()
-    
 
     for i in range(pool_count):
-        vms_queue.put(vms[i])
+        vms_queue.put(vms['main'][i])
         lisa_queue.put(lisa_folders[i])
+
     
     logger.info('Creating the tests list')
     xml_list = RunLISA.create_test_list(config_dict['tests'], os.path.join(main_lisa_path, 'xml'))
@@ -284,20 +283,25 @@ if __name__ == '__main__':
         logPath = config_dict['generalConfig']['logPath']
         logger.debug('Using %s for tests log output' % logPath)
     except KeyError:
-        logPath = os.path.join(main_lisa_path, 'TestResults')
-        logger.debug('Log path was not specified for %s. Using default path' % xml_path)
+        config_dict['generalConfig']['logPath'] = os.path.join(main_lisa_path, 'TestResults')
+        logger.debug('Log path was not specified for %s. Using default path' % config_dict['generalConfig']['logPath'])
     
     try:
-        lisa_params = config_dict['lisaParams']
+        lisa_params = []
+        for key, value in config_dict['lisaParams'].iteritems():
+            lisa_params.append(key)
+            lisa_params.append(value)
     except KeyError:
         lisa_params = []
         logger.info('No extra params for LISA run have been specified')
 
+    multiprocessing.log_to_stderr()
     logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['generalConfig'], main_lisa_path, lisa_params), xml_list)
 
     logger.info('Test run completed')
+    logger.debug(result)
     # Parse results if specified
     if 'parseResults' in config_dict:
         logger.info('Parsing results')
