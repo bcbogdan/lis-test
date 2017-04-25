@@ -83,25 +83,21 @@ class RunLISA(object):
         lisa_cmd_list = ['powershell', lisa_bin, 'run', xml_dict['path']]
         lisa_cmd_list.extend(self.params)
         proc_logger.info('Running the following LISA command - %s' % ' '.join(lisa_cmd_list))
+        ica_log = os.path.join(self.config['logPath'], xml_dict['name'] +'.log')
         try:
             lisa_output = VirtualMachine.execute_command(lisa_cmd_list)
-            with open(os.path.join(self.main_lisa_path, xml_dict['name'] +'.log'), 'w') as log_file:
-                log_file.write(lisa_output) 
-            # Get ica log path
-            logFolders = [ dir for dir in self.config['logPath'] if xml_obj.get_tests_suite() in dir ]
-            proc_logger.info(logFolders)
-            #result = (xml_dict['path'], max(logFolders, key=os.path.getmtime))
-            result = (xml_dict['path'],  logFolders)
+            ica_log = os.path.join(self.config['logPath'], xml_dict['name'] +'.log')
         except RuntimeError as lisa_error:
-            proc_logger.error('Test run exited with errors')
+            proc_logger.error('Test run exited with error code')
             proc_logger.error(lisa_error)
-            result = False
         
         sleep(60)
         
+        # Get the full path of the log files
+        log_folders = [os.path.join(self.config['logPath'] , dir) for dir in os.listdir(self.config['logPath']) if xml_obj.get_tests_suite() in dir ]
         self.vm_queue.put(vm_name)
         self.lisa_queue.put(lisa_path)
-        return result
+        return xml_dict['path'], max(log_folders, key=os.path.getmtime)
 
     @staticmethod
     def create_test_list(xml_dict, lisa_abs_xml_path, tests_config=False):
@@ -244,7 +240,6 @@ def validate_config(config_dict):
 
 if __name__ == '__main__':
     setup_logging(default_level=3)
-    
     config_file_path = r'.\\lisa_parser\\test_run_conf.json'
     if len(sys.argv) == 2:
         config_file_path  = sys.argv[1]
@@ -311,7 +306,6 @@ if __name__ == '__main__':
             parser_args.append(key)
             parser_args.append(value)
         for paths_tuple in result:
-            if path_tuple:
-                parser_args[0] = path_tuple[0]
-                parser_args[1] = os.path.join(path_tuple[1], 'ica.log')
-                main(parser_args)
+            parser_args[0] = path_tuple[0]
+            parser_args[1] = os.path.join(path_tuple[1], 'ica.log')
+            main(parser_args)

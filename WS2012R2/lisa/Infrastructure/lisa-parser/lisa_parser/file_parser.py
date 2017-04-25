@@ -896,8 +896,3 @@ class IPERFLogsReader(BaseLogsReader):
                             log_dict['PacketSize_KBytes'] = float(
                                 pkg_size.group(1).strip())
         return log_dict
-
-if __name__ == '__main__':
-    xml_obj = ParseXML(r'C:\Users\bogda\Work\lis-work\WS2012R2\lisa\xml\KvpTests.xml')
-    xml_obj.edit_test_parameter('SQM_Basic', ('onError', 'Exit'))
-    xml_obj.tree.write(r'C:\Users\bogda\Work\lis-work\WS2012R2\lisa\xml\KvpTests.xml')
