@@ -81,7 +81,30 @@ class ParseXML(object):
         test_details_element = ElementTree.TreeBuilder()
         self.build_element(test_details_element, 'test', test_dict)
         test_details_root = test_details_element.close()
-        self.root.find('testCases').insert(position, test_details_root) 
+        self.root.find('testCases').insert(position, test_details_root)
+    
+    def add_extra_parameter(self, test_name, parameter):
+        param_builder = ElementTree.TreeBuilder()
+        param_builder.start(parameter[0])
+        param_builder.data(parameter[1])
+        param_builder.end(parameter[0])
+        param_element = param_builder.close()
+        print(ElementTree.dump(param_element))
+        for test in self.tests:
+            if test_name == test.find('testName').text:
+                if not test.find(parameter[0]):
+                    test.append(param_element)
+                else:
+                    logger.warning('Specified element already exists in %s definition - %s' % (test_name, parameter[0]))
+                    logger.warning('Skipping element insertion')
+    
+    def edit_test_parameter(self, test_name, parameter):
+        for test in self.tests:
+            if test_name == test.find('testName').text:
+                if test.find(parameter[0]):
+                    test.find(parameter[0]).text = parameter[1]
+                else:
+                    logger.warning('Unable to find parameter %s for %s' % (parameter[0], test_name))
     
     @staticmethod
     def build_element(builder, tag_value, field_value):
@@ -873,3 +896,8 @@ class IPERFLogsReader(BaseLogsReader):
                             log_dict['PacketSize_KBytes'] = float(
                                 pkg_size.group(1).strip())
         return log_dict
+
+if __name__ == '__main__':
+    xml_obj = ParseXML(r'C:\Users\bogda\Work\lis-work\WS2012R2\lisa\xml\KvpTests.xml')
+    xml_obj.edit_test_parameter('SQM_Basic', ('onError', 'Exit'))
+    xml_obj.tree.write(r'C:\Users\bogda\Work\lis-work\WS2012R2\lisa\xml\KvpTests.xml')
