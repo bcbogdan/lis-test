@@ -36,11 +36,10 @@ import ntpath
 import sys
 
 logger = logging.getLogger(__name__)
-proc_logger = multiprocessing.get_logger()
+proc_logger = multiprocessing.log_to_stderr()
+proc_logger.setLevel(logging.INFO)
 # TODO
-# multiprocessing logging - config logging for each process
-# argument parser - config file path, skip setup 
-# edit individual test params
+# multiprocessing logging
 # add documentation
 
 class RunLISA(object):
@@ -91,12 +90,15 @@ class RunLISA(object):
             proc_logger.error('Test run exited with error code')
             proc_logger.error(lisa_error)
         
-        sleep(60)
+        sleep(10)
         
-        # Get the full path of the log files
-        log_folders = [os.path.join(self.config['logPath'] , dir) for dir in os.listdir(self.config['logPath']) if xml_obj.get_tests_suite() in dir ]
+        #Get the full path of the log files
+        test_suite = xml_dict['name'].split('.')[0]
+        log_folders = [os.path.join(self.config['logPath'] , dir) for dir in os.listdir(self.config['logPath']) if test_suite in dir ]
         self.vm_queue.put(vm_name)
         self.lisa_queue.put(lisa_path)
+        log_folder = max(log_folders, key=os.path.getmtime)
+        proc_logger.info('Test log folder - %s' % log_folder)
         return xml_dict['path'], max(log_folders, key=os.path.getmtime)
 
     @staticmethod
@@ -271,7 +273,7 @@ if __name__ == '__main__':
 
     
     logger.info('Creating the tests list')
-    xml_list = RunLISA.create_test_list(config_dict['tests'], os.path.join(main_lisa_path, 'xml'))
+    xml_list = RunLISA.create_test_list(config_dict['tests'], os.path.join(main_lisa_path, 'xml'), config_dict['testsConfig'])
 
     # Check for logPath
     try:
@@ -290,7 +292,6 @@ if __name__ == '__main__':
         lisa_params = []
         logger.info('No extra params for LISA run have been specified')
 
-    multiprocessing.log_to_stderr()
     logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['generalConfig'], main_lisa_path, lisa_params), xml_list)
