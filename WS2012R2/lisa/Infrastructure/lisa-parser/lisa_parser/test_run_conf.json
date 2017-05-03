@@ -33,6 +33,16 @@
     "lisaParams": {
 
     },
+    "extraTests": {
+        "testName": "VMHeartbeat",
+        "testScript": "SetupScripts\\INST_LIS_TestVMHeartbeat.ps1",
+        "testParams": {
+            "param": ["TC_COVERED=CORE-03"]
+        },
+        "timeout": "600",
+        "onError": "Continue",
+        "noReboot": "True"
+    },
     "processes": 4,
     "parseResults": {
         // lisa parser params as key: value - "--config": "config_file_path"
