@@ -19,6 +19,7 @@ See the Apache Version 2.0 License for specific language governing
 permissions and limitations under the License.
 """
 
+from __future__ import print_function
 from virtual_machine import VirtualMachine
 from file_parser import ParseXML
 from envparse import env
@@ -28,6 +29,7 @@ from config import setup_logging
 from lisa_parser import main
 from collections import defaultdict
 from time import time
+import argparse
 import lisa_utils
 import json
 import multiprocessing
@@ -39,11 +41,11 @@ import sys
 
 logger = logging.getLogger(__name__)
 proc_logger = multiprocessing.log_to_stderr()
-proc_logger.setLevel(logging.INFO)
+proc_logger.setLevel(logging.ERROR)
+
 # TODO
-# multiprocessing logging - config logging for each process
-# argument parser - config file path, skip setup
 # add documentation
+# log to file
 
 class RunLISA(object):
     xml_files = [
@@ -74,19 +76,14 @@ class RunLISA(object):
             xml_obj.remove_tests(xml_dict['skip'])
         
         if 'params' in xml_dict:
-            proc_logger('Editing parameters %s for %s' % (xml_dict['params'], xml_dict['name']))
+            proc_logger.info('Editing parameters %s for %s' % (xml_dict['params'], xml_dict['name']))
             # Check for parameters that require vmName
             for test_name, params in xml_dict['params'].iteritems():
                 if 'vmName' in params.keys():
                     params['vmName'] = vm_name
             xml_obj.edit_test_params(xml_dict['params'])
-            
-        if 'extraTests' in xml_dict:
-            for index, value in xml_dict['extraTests']:
-                xml_obj.insert_test(value, index)
 
         xml_obj.tree.write(xml_dict['path'])
-
         lisa_path = self.lisa_queue.get()
         os.chdir(lisa_path)
         lisa_bin = os.path.join(lisa_path, 'lisa.ps1')
@@ -143,7 +140,9 @@ class RunLISA(object):
 
         if extra_tests:
             for xml_dict in xml_list:
-                xml_dict['extraTests'] = extra_tests
+                xml_obj = ParseXML(xml_dict['path'])
+                [ xml_obj.insert_test(test_case, extra_tests.index(test_case)) for test_case in extra_tests ]
+                xml_obj.tree.write(xml_dict['path'])
  
         return xml_list
 
@@ -177,61 +176,98 @@ def validate_config(config_dict):
     else:
         return True
 
+def init_arg_parser():
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument(
+        "-c", "--config", 
+        default=r'.\\lisa_parser\\test_run_conf.json',
+        help="path to the xml config file"
+    )
+    arg_parser.add_argument(
+        "-s", "--skip_lisa_setup",
+        default=False,
+        action='store_true',
+        help="flag that inicates if setup steps should be skipped"
+        )
+    arg_parser.add_argument(
+        "-w", "--work_folder",
+        default=False,
+        help='full path of the folder that will contain the LISA repos')
+    arg_parser.add_argument(
+        "-l", "--log_level",
+        default=3, type=int,
+        help="logging level")
+
+    return arg_parser
 
 if __name__ == '__main__':
     # TODO: Add option to specify work folder path
-    work_folder_name = 'test_run'
-    setup_logging(default_level=3)
-    config_file_path = r'.\\lisa_parser\\test_run_conf.json'
-    if len(sys.argv) == 2:
-        config_file_path  = sys.argv[1]
-            
-    if not os.path.exists(config_file_path):
-        logger.error('Specified config file not found - %s' %  config_file_path)
-        sys.exit(1)
+    arg_parser = init_arg_parser()
+    parsed_arguments = arg_parser.parse_args(sys.argv[1:])
+    setup_logging(default_level=parsed_arguments.log_level)
 
-    with open(config_file_path) as config_data:
+    with open(parsed_arguments.config) as config_data:
         config_dict = json.load(config_data)
         if not validate_config(config_dict):
             sys.exit(1) 
 
-    lisa_setup_start = time()
-    logger.debug('Running test run setup with - %s' % config_dict)
+    main_lisa_path = RunLISA.get_lisa_path()
+    work_folder = parsed_arguments.work_folder
+    if not work_folder: work_folder = os.path.join(main_lisa_path, 'test_run')
 
     pool_count = int(config_dict['processes'])
     logger.info('LISA will run on {} different processes'.format(pool_count))
 
-    logger.info('Copying VHDs')
-    vhd_folder = False
-    vhd_copy_process_start = time()
-    if 'vhdFolder' in config_dict['vms']['main'].keys(): vhd_folder = config_dict['vms']['main']['vhdFolder']
-    pool_list = lisa_utils.init_copy_vhds(config_dict['vms']['main']['vhdPath'], count=pool_count)
-    logger.info(pool_list)
-    vhd_list = multiprocessing.Pool(pool_count).map(lisa_utils.copy_item, pool_list)
-    vhd_copy_process_time = time() - vhd_copy_process_start
-    logger.info('VHD list {}'.format(vhd_list))
-    logger.info('Elapsed time for VHD copy process - {}'.format(vhd_copy_process_time))
+    if parsed_arguments.skip_lisa_setup:
+        vms = []
+        for index in range(pool_count):
+            vm_name = config_dict['vms']['main']['name'] + str(index+1)
+            try:
+                VirtualMachine.execute_command(['powershell', 'Get-VM', '-Name', vm_name, '-ComputerName', config_dict['vms']['main']['server']])
+                vms.append(vm_name)
+            except RuntimeError as err:
+                logger.error('Unable to find VM {}'.format(vm_name))
+                sys.exit(1)
+        lisa_folders = [ os.path.join(work_folder, lisa_folder) for lisa_folder in os.listdir(work_folder) ]
+        if len(lisa_folders) < pool_count:
+            logger.error('Invalid number of LISA folders')
+            sys.exit(0)
+    else:
+        lisa_setup_start = time()
+        logger.debug('Running test run setup with - %s' % config_dict)
 
-    
-    main_lisa_path = RunLISA.get_lisa_path()
-    logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
-    vms = lisa_utils.create_vms(vhd_list, vm_base_name=config_dict['vms']['main']['name'])
-    # TODO: Create dependency VM
-    logger.debug('Created vms - %s' % vms)
+        logger.info('Copying VHDs')
+        vhd_folder = False
+        vhd_copy_process_start = time()
+        if 'vhdFolder' in config_dict['vms']['main'].keys(): vhd_folder = config_dict['vms']['main']['vhdFolder']
+        pool_list = lisa_utils.init_copy_vhds(config_dict['vms']['main']['vhdPath'], count=pool_count)
+        logger.info(pool_list)
+        vhd_list = multiprocessing.Pool(pool_count).map(lisa_utils.copy_item, pool_list)
+        vhd_copy_process_time = time() - vhd_copy_process_start
+        logger.info('VHD list {}'.format(vhd_list))
+        logger.info('Elapsed time for VHD copy process - {}'.format(vhd_copy_process_time))
 
-    work_folder = os.path.join(main_lisa_path, work_folder_name)
-    if os.path.exists(work_folder): VirtualMachine.execute_command(['powershell', 'Remove-Item','-Recurse', '-Force', work_folder])
-    os.mkdir(work_folder)
-    lisa_folders = lisa_utils.copy_lisa_folder(main_lisa_path, work_folder, count=pool_count)
-    logger.debug('LISA folders list - %s' % lisa_folders)
-    logger.info('Elapsed time for LISA setup - {}'.format(time() - lisa_setup_start))
+        
+        
+        logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
+        vms = lisa_utils.create_vms(vhd_list, vm_base_name=config_dict['vms']['main']['name'])
+        # TODO: Create dependency VM
+        logger.debug('Created vms - %s' % vms)
 
+        if os.path.exists(work_folder): VirtualMachine.execute_command(['powershell', 'Remove-Item','-Recurse', '-Force', work_folder])
+        os.mkdir(work_folder)
+        lisa_folders = lisa_utils.copy_lisa_folder(main_lisa_path, work_folder, count=pool_count)
+        logger.debug('LISA folders list - %s' % lisa_folders)
+        logger.info('Elapsed time for LISA setup - {}'.format(time() - lisa_setup_start))
+
+    logger.info(vms)
+    logger.info(lisa_folders)
     proc_manager = multiprocessing.Manager()
     vms_queue = proc_manager.Queue()
     lisa_queue = proc_manager.Queue()
 
     for i in range(pool_count):
-        vms_queue.put(vms['main'][i])
+        vms_queue.put(vms[i])
         lisa_queue.put(lisa_folders[i])
 
     
@@ -241,7 +277,6 @@ if __name__ == '__main__':
 
     logger.info('Creating the tests list')
     xml_list = RunLISA.create_test_list(config_dict['tests'], os.path.join(main_lisa_path, 'xml'), config_dict['testsConfig'], extra_tests)
-
     # Check for logPath
     try:
         logPath = config_dict['generalConfig']['logPath']
@@ -259,13 +294,13 @@ if __name__ == '__main__':
         lisa_params = []
         logger.info('No extra params for LISA run have been specified')
 
-    #multiprocessing.log_to_stderr()
     logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['generalConfig'], main_lisa_path, lisa_params), xml_list)
 
     logger.info('Test run completed')
     logger.debug(result)
+
     # Parse results if specified
     if 'parseResults' in config_dict:
         logger.info('Parsing results')

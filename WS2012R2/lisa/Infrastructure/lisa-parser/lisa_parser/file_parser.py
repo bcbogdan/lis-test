@@ -31,6 +31,7 @@ import shutil
 import decimal
 import json
 from collections import defaultdict
+from xml.dom import minidom
 try:
     import xml.etree.cElementTree as ElementTree
 except ImportError:
@@ -73,14 +74,23 @@ class ParseXML(object):
         @param position - position where the new test case should be inserted
         """
         test_name = test_dict['testName']
+        # Check if element already exists
+        for element in self.suite_tests.getchildren():
+            if test_name == element.text:
+                logger.warning('A test named {} already exists'.format(test_name))
+                logger.warning('Skipping insertion')
+                return False
+
         test_name_element = ElementTree.TreeBuilder()
-        self.build_element(test_name_element, 'testName', test_name)
+        ParseXML.build_element(test_name_element, 'suiteTest', test_name)
         test_name_root = test_name_element.close()
+        test_name_root.tail = "\n" + "    " * 4
         self.suite_tests.insert(position, test_name_root)
 
         test_details_element = ElementTree.TreeBuilder()
-        self.build_element(test_details_element, 'test', test_dict)
+        ParseXML.build_element(test_details_element, 'test', test_dict)
         test_details_root = test_details_element.close()
+        ParseXML.indent_element(test_details_root, level=2)
         self.root.find('testCases').insert(position, test_details_root)
     
     def add_extra_parameter(self, test_name, parameter):
@@ -105,9 +115,26 @@ class ParseXML(object):
                     test.find(parameter[0]).text = parameter[1]
                 else:
                     logger.warning('Unable to find parameter %s for %s' % (parameter[0], test_name))
+
+    @staticmethod
+    def indent_element(elem, level=0):
+        i = '\n' + level*"    "
+        if len(elem):
+            if not elem.text or not elem.text.strip():
+                elem.text = i + "    "
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+            for elem in elem:
+                ParseXML.indent_element(elem, level+1)
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+        elif level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
     
     @staticmethod
     def build_element(builder, tag_value, field_value):
+        if type(field_value) is unicode:
+            field_value = str(field_value)
         if type(field_value) is str:
             builder.start(tag_value)
             builder.data(field_value)
@@ -896,3 +923,4 @@ class IPERFLogsReader(BaseLogsReader):
                             log_dict['PacketSize_KBytes'] = float(
                                 pkg_size.group(1).strip())
         return log_dict
+
