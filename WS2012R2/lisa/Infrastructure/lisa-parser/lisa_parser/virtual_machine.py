@@ -223,8 +223,9 @@ class VirtualMachine(object):
         return kvp_output
 
     @staticmethod
-    def execute_command(command_arguments):
+    def execute_command(command_arguments, log_output=False):
         logger.debug('Running the follwing command - %s' % ' '.join(command_arguments))
+        print(command_arguments)
         ps_command = subprocess.Popen(
             command_arguments,
             stdout=subprocess.PIPE,
@@ -233,7 +234,8 @@ class VirtualMachine(object):
 
         stdout_data, stderr_data = ps_command.communicate()
 
-        logger.debug('Command output %s', stdout_data)
+        if log_output:
+            logger.debug('Command output %s', stdout_data)
         if ps_command.returncode != 0:
             raise RuntimeError(
                 "Command failed, status code {} stdout {} stderr {}".format(
@@ -242,3 +244,4 @@ class VirtualMachine(object):
             )
         else:
             return stdout_data
+
