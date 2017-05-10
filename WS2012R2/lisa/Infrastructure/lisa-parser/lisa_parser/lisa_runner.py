@@ -42,10 +42,9 @@ import sys
 logger = logging.getLogger(__name__)
 proc_logger = multiprocessing.log_to_stderr()
 proc_logger.setLevel(logging.ERROR)
-
 # TODO
+# argument parser - config file path, skip setup
 # add documentation
-# log to file
 
 class RunLISA(object):
     xml_files = [
@@ -83,6 +82,11 @@ class RunLISA(object):
                     params['vmName'] = vm_name
             xml_obj.edit_test_params(xml_dict['params'])
 
+        if xml_dict['name'] == 'LTP.xml':
+            non_sut_vm = xml_obj.root.find('VMs').getchildren()[1]
+            non_sut_vm.find('hvServer').text = self.config['hvServer']
+            non_sut_vm.find('vmName').text = self.config['testParams']['VM2NAME']
+
         xml_obj.tree.write(xml_dict['path'])
         lisa_path = self.lisa_queue.get()
         os.chdir(lisa_path)
@@ -91,14 +95,16 @@ class RunLISA(object):
         lisa_cmd_list.extend(self.params)
         proc_logger.info('Running the following LISA command - %s' % ' '.join(lisa_cmd_list))
         ica_log = os.path.join(self.config['logPath'], xml_dict['name'] +'.log')
+        run_start = time()
         try:
-            lisa_output = VirtualMachine.execute_command(lisa_cmd_list)
+            lisa_output = VirtualMachine.execute_command(lisa_cmd_list, log_output=False)
             ica_log = os.path.join(self.config['logPath'], xml_dict['name'] +'.log')
         except RuntimeError as lisa_error:
-            proc_logger.error('Test run exited with error code')
-            proc_logger.error(lisa_error)
-        
-        sleep(10)
+            proc_logger.warning('Test run for {} exited with error code'.format(xml_dict['name']))
+
+        run_end = time() - run_start
+        logger.info('Test run finished in {} seconds'.format(run_end))
+        sleep(60)
         
         #Get the full path of the log files
         test_suite = xml_dict['name'].split('.')[0]
@@ -234,21 +240,19 @@ if __name__ == '__main__':
             sys.exit(0)
     else:
         lisa_setup_start = time()
-        logger.debug('Running test run setup with - %s' % config_dict)
+        logger.debug('Running test run setup')
 
         logger.info('Copying VHDs')
         vhd_folder = False
         vhd_copy_process_start = time()
         if 'vhdFolder' in config_dict['vms']['main'].keys(): vhd_folder = config_dict['vms']['main']['vhdFolder']
         pool_list = lisa_utils.init_copy_vhds(config_dict['vms']['main']['vhdPath'], count=pool_count)
-        logger.info(pool_list)
+        [ logger.debug('VHD Path - {}'.format(path[1])) for path in pool_list ]
+        logger.info('Copying VHDs')
         vhd_list = multiprocessing.Pool(pool_count).map(lisa_utils.copy_item, pool_list)
         vhd_copy_process_time = time() - vhd_copy_process_start
         logger.info('VHD list {}'.format(vhd_list))
         logger.info('Elapsed time for VHD copy process - {}'.format(vhd_copy_process_time))
-
-        
-        
         logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
         vms = lisa_utils.create_vms(vhd_list, vm_base_name=config_dict['vms']['main']['name'])
         # TODO: Create dependency VM
@@ -260,8 +264,6 @@ if __name__ == '__main__':
         logger.debug('LISA folders list - %s' % lisa_folders)
         logger.info('Elapsed time for LISA setup - {}'.format(time() - lisa_setup_start))
 
-    logger.info(vms)
-    logger.info(lisa_folders)
     proc_manager = multiprocessing.Manager()
     vms_queue = proc_manager.Queue()
     lisa_queue = proc_manager.Queue()
@@ -270,7 +272,6 @@ if __name__ == '__main__':
         vms_queue.put(vms[i])
         lisa_queue.put(lisa_folders[i])
 
-    
     extra_tests = False
     if 'extraTests' in config_dict:
         extra_tests = config_dict['extraTests']
@@ -294,13 +295,15 @@ if __name__ == '__main__':
         lisa_params = []
         logger.info('No extra params for LISA run have been specified')
 
+    #multiprocessing.log_to_stderr()
     logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
+    lisa_run_start = time()
     result = proc.map(RunLISA(lisa_queue, vms_queue, config_dict['generalConfig'], main_lisa_path, lisa_params), xml_list)
-
-    logger.info('Test run completed')
-    logger.debug(result)
-
+    lisa_run_time = time() - lisa_run_start
+    logger.info('Test run completed in {} seconds'.format(lisa_run_time))
+    logger.info('Test results can be found in:')
+    [ logger.info('{} - {}'.format(item[0], item[1])) for item in result]
     # Parse results if specified
     if 'parseResults' in config_dict:
         logger.info('Parsing results')
