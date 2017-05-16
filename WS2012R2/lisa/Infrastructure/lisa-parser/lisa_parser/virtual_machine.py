@@ -225,7 +225,6 @@ class VirtualMachine(object):
     @staticmethod
     def execute_command(command_arguments, log_output=False):
         logger.debug('Running the follwing command - %s' % ' '.join(command_arguments))
-        print(command_arguments)
         ps_command = subprocess.Popen(
             command_arguments,
             stdout=subprocess.PIPE,
@@ -244,4 +243,3 @@ class VirtualMachine(object):
             )
         else:
             return stdout_data
-

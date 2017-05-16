@@ -57,6 +57,20 @@ class ParseXML(object):
         return self.root.find('testSuites').getchildren()[0]\
             .find('suiteName').text
 
+    def check_for_dependency_vm(self):
+        try:
+            for param in self.vm_settings.find('testParams').getchildren():
+                if param.text.strip().split('=')[0].lower() == 'vm2name':
+                    return True
+        except AttributeError:
+            return False
+        return False
+
+    def update_dependency_vm(self, dep_vm_name):
+        for param in self.vm_settings.find('testParams').getchildren():
+            if param.text.strip().split('=')[0].lower() == 'vm2name':
+                param.text = 'VM2NAME={}'.format(dep_vm_name)
+
     def get_global_config(self):
         """Parses the first part of a test run XML that holds genernal config info
         
