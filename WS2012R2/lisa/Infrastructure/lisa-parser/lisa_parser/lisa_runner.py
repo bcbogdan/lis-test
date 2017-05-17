@@ -246,6 +246,11 @@ def init_arg_parser():
     return arg_parser
 
 if __name__ == '__main__':
+    # lisa_path = 'F:\\bocarp\\sles12sp3\\WS2012R2\\lisa\\lisa.ps1'
+    # xml_path = 'F:\\bocarp\\sles12sp3\\WS2012R2\\lisa\\xml\\NET_Tests.xml'
+    # for line in RunLISA.run_lisa(lisa_path, xml_path):
+    #     print(line)
+    # sys.exit(0)
     # TODO: Add option to specify work folder path
     arg_parser = init_arg_parser()
     parsed_arguments = arg_parser.parse_args(sys.argv[1:])
@@ -258,6 +263,7 @@ if __name__ == '__main__':
             sys.exit(1) 
 
     main_lisa_path = RunLISA.get_lisa_path()
+    logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
     work_folder = parsed_arguments.work_folder
     if not work_folder: work_folder = os.path.join(main_lisa_path, 'test_run')
     logger.info('Creating the tests list')
@@ -268,26 +274,24 @@ if __name__ == '__main__':
 
     dep_no  = 0
     for xml_dict in xml_list: 
-        if ParseXML(xml_dict['path']).check_for_dependency_vm: 
+        if ParseXML(xml_dict['path']).check_for_dependency_vm(): 
             dep_no += 1
     
     if 'processes' in config_dict.keys():
         pool_count = int(config_dict['processes'])
     else:
         pool_count = len(xml_list)
-
     logger.info('LISA will run on {} different processes'.format(pool_count))
 
     if parsed_arguments.skip_lisa_setup:
-        vms = []
-        for index in range(pool_count):
-            vm_name = config_dict['vms']['main']['name'] + str(index+1)
-            try:
-                VirtualMachine.execute_command(['powershell', 'Get-VM', '-Name', vm_name, '-ComputerName', config_dict['vms']['main']['server']])
-                vms.append(vm_name)
-            except RuntimeError as err:
+        main_vms_list = [ vm['vmName'] for vm in lisa_utils.init_create_vms(config_dict['vms']['main'], count=pool_count) ]
+        dep_vms_list = [ vm['vmName'] for vm in lisa_utils.init_create_vms(config_dict['vms']['dependency'], count=pool_count) ]
+        vms = main_vms_list + dep_vms_list
+        for vm in vms:
+            if not VirtualMachine.check_vm(vm_name, config_dict['vms']['main']['server']):
                 logger.error('Unable to find VM {}'.format(vm_name))
                 sys.exit(1)
+
         lisa_folders = [ os.path.join(work_folder, lisa_folder) for lisa_folder in os.listdir(work_folder) ]
         if len(lisa_folders) < pool_count:
             logger.error('Invalid number of LISA folders')
@@ -295,40 +299,24 @@ if __name__ == '__main__':
     else:
         lisa_setup_start = time()
         logger.debug('Running test run setup')
-        logger.info('Copying VHDs')
-        vhd_folder = False
-        vhd_copy_process_start = time()
-        pool_list = lisa_utils.init_copy_vhds(config_dict['vms']['main']['vhdPath'], count=pool_count)
-        [ logger.debug('VHD Path - {}'.format(path[1])) for path in pool_list ]
-        logger.info('Copying VHDs')
-        vhd_list = []
-        pool_result = multiprocessing.Pool(pool_count).map_async(lisa_utils.copy_item, pool_list, callback=vhd_list.append)
-        final_size = os.stat(config_dict['vms']['main']['vhdPath']).st_size * pool_count
+        main_vms = lisa_utils.init_create_vms(config_dict['vms']['main'], count=pool_count)
+        dep_vms = lisa_utils.init_create_vms(config_dict['vms']['dependency'], count=dep_no)
+        logger.info('Creating main VMs')
+        main_vms_list = []
+        pool_result = multiprocessing.Pool(pool_count).map_async(lisa_utils.create_vm, main_vms, callback=main_vms_list.append)
+        jobs_count = len(main_vms)
         while not pool_result.ready():
-            try:
-                current_size = sum([os.stat(vhd_path[1]).st_size for vhd_path in pool_list])
-                lisa_utils.print_progress_bar(current_size, final_size, prefix="Copy Progress:", suffix="Complete")
-            except WindowsError:
-                continue        
-        vhd_copy_process_time = time() - vhd_copy_process_start
-        logger.info('VHD list {}'.format(vhd_list[0]))
-        logger.info('Elapsed time for VHD copy process - {}'.format(vhd_copy_process_time))
-        logging.info('Using the following path for the main LISA folder - %s' % main_lisa_path)
-        vms = lisa_utils.create_vms(vhd_list[0], vm_base_name=config_dict['vms']['main']['name'])
-        # TODO: Create dependency VM
-        logger.debug('Created vms - %s' % vms)
-
-        dep_vhds = []
-        dep_list = lisa_utils.init_copy_vhds(config_dict['vms']['dependency']['vhdPath'], count=dep_no, base_vhd_name='lis_next_dep_vhd')
-        pool_result = multiprocessing.Pool(pool_count).map_async(lisa_utils.copy_item, dep_list, callback=dep_vhds.append)
-        final_size = os.stat(config_dict['vms']['dependency']['vhdPath']).st_size * pool_count
+            lisa_utils.print_progress_bar(jobs_count - pool_result._number_left, jobs_count, prefix="Main VMs Create Progress:", suffix="Complete")     
+        lisa_utils.print_progress_bar(jobs_count, jobs_count, prefix="Main VMs Create Progress:", suffix="Complete") 
+        logger.info('The following VMs were created: {}'.format(main_vms_list))
+        logger.info('Creating dependency VMs')
+        dep_vms_list = []
+        pool_result = multiprocessing.Pool(dep_no).map_async(lisa_utils.create_vm, dep_vms, callback=dep_vms_list.append)
+        jobs_count = len(main_vms)
         while not pool_result.ready():
-            try:
-                current_size = sum([os.stat(vhd_path[1]).st_size for vhd_path in dep_list])
-                lisa_utils.print_progress_bar(current_size, final_size, prefix="Copy Progress:", suffix="Complete")
-            except WindowsError:
-                continue        
-        dep_vms = lisa_utils.create_vms(dep_vhds[0], vm_base_name=config_dict['vms']['dependency']['name'])
+            lisa_utils.print_progress_bar(jobs_count - pool_result._number_left, jobs_count, prefix="Dependency VMs Create Progress:", suffix="Complete")      
+        lisa_utils.print_progress_bar(jobs_count, jobs_count, prefix="Main VMs Create Progress:", suffix="Complete") 
+        logger.info('The following VMs were created {}'.format(dep_vms_list))
 
         if os.path.exists(work_folder): VirtualMachine.execute_command(['powershell', 'Remove-Item','-Recurse', '-Force', work_folder])
         os.mkdir(work_folder)
@@ -343,11 +331,11 @@ if __name__ == '__main__':
     events_queue = proc_manager.Queue()
 
     for i in range(pool_count):
-        vms_queue.put(vms[i])
+        vms_queue.put(main_vms_list[i])
         lisa_queue.put(lisa_folders[i])
 
-    for i in range(4):
-        dep_vms_queue.put(dep_vms[i])
+    for i in range(len(dep_vms_list)):
+        dep_vms_queue.put(dep_vms_list[i])
 
     # Check for logPath
     try:
@@ -370,6 +358,7 @@ if __name__ == '__main__':
     logger.info('Starting %d parallel LISA runs' % pool_count)
     proc = multiprocessing.Pool(pool_count)
     lisa_run_start = time()
+    lisa_results = []
     result = proc.map_async(RunLISA(lisa_queue, vms_queue, config_dict['generalConfig'], main_lisa_path, dep_vms_queue, config_dict['vms']['dependency'], lisa_params, events_queue), xml_list, callback=lisa_results.append)
     tests_no = len(xml_list)
     while not result.ready():
@@ -377,6 +366,7 @@ if __name__ == '__main__':
             print(100*' ', end='\r')
             logger.info(events_queue.get())
         lisa_utils.print_progress_bar(tests_no-result._number_left, tests_no, prefix="Tests run progress:", suffix="Remaining tests {}".format(result._number_left))
+    lisa_utils.print_progress_bar(tests_no, tests_no, prefix="Tests run progress:", suffix="Complete")
     lisa_run_time = time() - lisa_run_start
     logger.info('Test run completed in {} seconds'.format(lisa_run_time))
     logger.info('Test results can be found in:')

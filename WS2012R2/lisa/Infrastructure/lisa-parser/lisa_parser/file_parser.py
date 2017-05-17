@@ -937,4 +937,3 @@ class IPERFLogsReader(BaseLogsReader):
                             log_dict['PacketSize_KBytes'] = float(
                                 pkg_size.group(1).strip())
         return log_dict
-

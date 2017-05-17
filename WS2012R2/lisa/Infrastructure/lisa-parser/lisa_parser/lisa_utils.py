@@ -27,26 +27,39 @@ import logging
 import sys
 
 logger = logging.getLogger(__name__)
-def init_copy_vhds(source_path, destination_path=False, count=1, base_vhd_name=""):
-    """ Create a list of tuples that can be processed as by the pool method for the copy vhd process
-    """
-    if not destination_path:
-        destination_path = VirtualMachine.get_default_vhd_path().strip()
 
-    base_name = basename(source_path).strip()
-    vhd_name = "-".join([base_vhd_name, base_name.split('.')[0]])
-    if count > 1:
-        return [ (source_path, path.join(destination_path, vhd_name + str(index) + '.vhdx')) for index in range(count) ]
+def generate_vhd_names(source_vhd_path, destination_vhd_folder, count=1, base_vhd_name=""):
+    """ Generate incremental vhd paths based on the source vhd name
+    """
+    base_name = basename(source_vhd_path).strip()
+    vhd_name = "".join([base_vhd_name, base_name.split('.')[0]])
+    for index in range(count):
+        yield path.join(destination_vhd_folder, vhd_name + str(index) + '.' + base_name.split('.')[1]) 
+
+def init_create_vms(vm_settings, count=1):
+    if 'vhdFolder' not in vm_settings.keys():
+        vhd_folder = VirtualMachine.get_default_vhd_path().strip()
     else:
-        return [(source_path, path.join(destination_path, base_name))]
+        vhd_folder = vm_settings['vhdFolder']
 
-def copy_item(path_tuple):
-    """ Copies a file and returns the destination path 
-    """
-    #print('asdasd')
-    if path.exists(path_tuple[1]): remove(path_tuple[1])
-    copy(path_tuple[0], path_tuple[1])
-    return path_tuple[1]
+    vm_list = []
+    vhd_paths = generate_vhd_names(vm_settings['vhdPath'], vhd_folder, count=count, base_vhd_name=vm_settings['name'])
+    index = 0
+    for path in vhd_paths:
+        index += 1
+        vm_dict = {
+            'vmName': vm_settings['name'] + str(index),
+            'sourceVhd': vm_settings['vhdPath'],
+            'vhdPath': path,
+            'server': vm_settings['server'],
+            'switchName': vm_settings['switchName'],
+            'memory': vm_settings['memory'],
+            'snapshotName': vm_settings['snapshotName'],
+            'generation': vm_settings['generation']
+        }
+        vm_list.append(vm_dict)
+
+    return vm_list
 
 def copy_lisa_folder(lisa_path, destination_folder, count=1):
     """ Copies the LISA folder, multiple time, so multiple LISA runs can be executed afterwards
@@ -66,52 +79,26 @@ def copy_lisa_folder(lisa_path, destination_folder, count=1):
                 	copy(full_path, path.join(destination_path, item_path))
     return lisa_paths
 
-def create_vms(vhd_path_list, vm_base_name='lisa_parser_vm', hv_server='localhost', switch_name='external', mem_size='1GB', checkpoint='icabase'):
-    """ Creates multiple VMs, from a provided vhd list, in order to run multiple LISA tests
-    """
-    vm_list = []
-    index = 1
-    for vhd_path in vhd_path_list:
-        vm_name = ''.join([vm_base_name, str(index)])
-        # Create VM fails for folders that contain spaces
-        vhd_path = ''.join(["\"", vhd_path, "\""])
-        # Check if VM already exists
-        try:
-            VirtualMachine.execute_command(['powershell', 'Get-VM', '-Name', vm_name, '-ComputerName', hv_server], log_output=False)
-            logger.debug('Virtual Machine {} already exists'.format(vm_name))
-            logger.debug('Removing existing VM')
-            VirtualMachine.execute_command(['powershell', 'Remove-VM', '-Name', vm_name, '-ComputerName', hv_server, '-Force'])
-        except RuntimeError as vm_err:
-            logger.warning('Error while querying for VM')
-            logger.warning(vm_err)
+def create_vm(vm_settings_dict):
+    # Copy VM VHD
+    source_vhd_path = vm_settings_dict['sourceVhd']
+    vm_vhd_path = vm_settings_dict['vhdPath']
+    if path.exists(vm_vhd_path): remove(vm_vhd_path)
+    copy(source_vhd_path, vm_vhd_path)
 
-        VirtualMachine.create_vm(vm_name, vhd_path, switch_name, hv_server, mem_size)
-        if checkpoint: VirtualMachine.create_checkpoint(vm_name, hv_server, checkpoint)
-        vm_list.append(vm_name)
-        index += 1
+    # Create VM
+    vm_name = vm_settings_dict['vmName']
+    hv_server = vm_settings_dict['server']
+    # New-VM fails for folders that contain spaces
+    vm_vhd_path = ''.join(["\"", vm_vhd_path, "\""])
 
-    return vm_list
+    if VirtualMachine.check_vm(vm_name, hv_server): VirtualMachine.remove_vm(vm_name, hv_server)
+    VirtualMachine.create_vm(
+        vm_name, vm_vhd_path, vm_settings_dict['switchName'], hv_server, vm_settings_dict['memory']
+    )
+    VirtualMachine.create_checkpoint(vm_name, hv_server, vm_settings_dict['snapshotName'])
 
-def get_progress_string(iteration, total, prefix = '', suffix='', decimals = 1, length = 50, fill = '#'):
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    return "\r {} |{}| {} {}".format(prefix, bar, percent, suffix)
-
-def write_on_line(output, line_number=1, new_line=False, direction='up'):
-    if direction == 'up':
-        direction = 'A'
-    elif direction == 'down':
-        direction = 'B'
-    if line_number > 0:
-        sys.stdout.write("\033[{}{}".format(line_number, direction))
-    #sys.stdout.write("\033[F")
-    sys.stdout.write(output)
-    sys.stdout.flush()
-    sys.stdout.write('\r')
-    sys.stdout.flush()
-    if new_line or iteration == total:
-        sys.stdout.write('\n')
+    return vm_name
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='#'):
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
