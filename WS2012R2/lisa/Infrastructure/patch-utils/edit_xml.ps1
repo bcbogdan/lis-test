@@ -10,21 +10,29 @@ class XMLWrapper {
         $this.properties =  Convertfrom-Stringdata (Get-Content $propertiesFile -raw)
     }
 
-    [void] AddTest([String] $testType, [String] $testName, [Array] $testParams) {
-        $suiteTest = $this.xml.CreateElement('suiteTest')
-        $suiteTest.AppendChild($this.xml.CreateTextNode($testName))
+    [void] AddBootTests([String] $testType, [String] $testName, [Array] $testParams) {
+        $installSuiteTest = $this.xml.CreateElement('suiteTest')
+        $installSuiteTest.AppendChild($this.xml.CreateTextNode("install_${testName}"))
+        
+        $bootSuiteTest = $this.xml.CreateElement('suiteTest')
+        $bootSuiteTest.AppendChild($this.xml.CreateTextNode($testName))
+        
+        $installLisTest = [XMLWrapper]::GetInstallLisTest()
+        $installLisTest.test.testName = "install_${testName}"
 
-        $testDescription = $this.getTestDescription($testType)
-        $testDescription.test.testName = $testName
+        $bootTest = [XMLWrapper]::GetKvpBasicTest()
+        $bootTest.test.testName = $testName
 
         foreach($param in $testParams) {
-            $paramElement = $testDescription.CreateElement('param')
-            $paramElement.AppendChild($testDescription.CreateTextNode($param))
-            $testDescription.test.testParams.AppendChild($paramElement)
+            $paramElement = $installLisTest.CreateElement('param')
+            $paramElement.AppendChild($installLisTest.CreateTextNode($param))
+            $installLisTest.test.testParams.AppendChild($paramElement)
         }
 
-        $this.xml.config.testSuites.suite.suiteTests.AppendChild($suiteTest)
-        $this.xml.config.testCases.AppendChild($this.xml.ImportNode($testDescription.test, $true))
+        $this.xml.config.testSuites.suite.suiteTests.AppendChild($installSuiteTest)
+        $this.xml.config.testSuites.suite.suiteTests.AppendChild($bootSuiteTest)
+        $this.xml.config.testCases.AppendChild($this.xml.ImportNode($installLisTest.test, $true))
+        $this.xml.config.testCases.AppendChild($this.xml.ImportNode($bootTest.test, $true))
     }
 
     [void] UpdateDistroImage([String] $distroName) {
@@ -32,20 +40,38 @@ class XMLWrapper {
         $this.xml.config.global.imageStoreDir = $imagePath
     }
 
-    [xml] getTestDescription([String] $testType) {
-        #TODO: Add multiple test descriptions
-
+    [xml] static GetInstallLisTest() {
         return [xml]"
         <test>
-                <files>remote-scripts/ica/install_lis_next.sh,remote-scripts/ica/utils.sh</files>
-                <onError>Abort</onError>
-                <testName>install_lis-next</testName>
-                <testScript>install_lis_next.sh</testScript>
-                <timeout>800</timeout>
-                <testParams>
-                    <param>TC_COVERED=lis-next-01</param>
-                    <param>lis_cleanup=yes</param>
-                </testParams>
+            <files>remote-scripts/ica/install_lis_next.sh,remote-scripts/ica/utils.sh</files>
+            <onError>Continue</onError>
+            <setupScript>
+                <file>setupscripts\RevertSnapshot.ps1</file>
+                <file>Insfrastructure\patch-utils\copy-files.ps1</file>
+            </setupScript>
+            <testName>install_lis-next</testName>
+            <testScript>install_lis_next.sh</testScript>
+            <timeout>800</timeout>
+            <testParams>
+                <param>TC_COVERED=lis-next-01</param>
+                <param>lis_cleanup=yes</param>
+            </testParams>
+        </test>
+        "
+    }
+
+    [xml] static GetKvpBasicTest() {
+        return [xml]"
+        <test>
+            <testName>KVP_Basic</testName>
+            <testScript>SetupScripts\KVP_Basic.ps1</testScript>
+            <timeout>600</timeout>
+            <onError>Continue</onError>
+            <noReboot>True</noReboot>
+            <testparams>
+                <param>TC_COVERED=KVP-01</param>
+                <param>DE_change=no</param>
+            </testparams>
         </test>
         "
     }
@@ -57,7 +83,7 @@ $xml = [XMLWrapper]::new($xmlPath, $propertiesPath)
 
 $tests = $testNames.Split(';')
 foreach($test in $tests) {
-    $xml.AddTest('INSTALL_LIS_NEXT', $test, @("custom_lis_next=/root/${test}"))
+    $xml.AddBootTests('INSTALL_LIS_NEXT', $test, @("custom_lis_next=/root/${test}", "source_path=/root/builds/${test}"))
 }
 
 $xml.UpdateDistroImage($distroName)
