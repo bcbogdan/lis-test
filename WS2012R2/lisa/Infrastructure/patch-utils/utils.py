@@ -69,8 +69,8 @@ def get_arg_parser():
 
     compile_patches = sub_parsers.add_parser('compile', help='Compile projects')
     compile_patches.add_argument(
-        'project_path',
-        help='Location of the projects that will be compiled',
+        'builds_path',
+        help='Location of the builds that will be compiled',
         default='/root/builds'
     )
 

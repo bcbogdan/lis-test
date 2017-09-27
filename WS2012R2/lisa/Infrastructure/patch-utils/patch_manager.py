@@ -24,24 +24,17 @@ def normalize_path(patch_path):
         for line in fileinput.input(patch_path, inplace=True):
             print line.replace(to_search, to_replace),
 
-def apply_patch(patch_file, dry_run=False):
-    if dry_run:
-        dry_run = '--dry-run'
-    else:
-        dry_run = ''
-
-    cmd = ['patch', dry_run, '--ignore-whitespace',
-            '-p1', '-F1', '-f', '<', patch_file
-    ]
+def apply_patch(build_folder, patch_file, dry_run=False):
+    cmd = ['cd', build_folder, '&&', 'patch', '<', patch_file]
     return run_command(cmd)
 
-def build(clean=False):
-    base_build_cmd = ['make', '-C']
+def build(build_folder, clean=False):
+    base_build_cmd = ['cd', build_folder, '&&', 'make', '-C']
     drivers = '/lib/modules/$(uname -r)/build M=`pwd`'
     daemons = './tools'
     # First run the clean commands
-    run_command(base_build_cmd, [drivers, 'clean'])
-    run_command(base_build_cmd, [daemons, 'clean'])
+    run_command(base_build_cmd + [drivers, 'clean'])
+    run_command(base_build_cmd + [daemons, 'clean'])
     
     if not clean:
         run_command(base_build_cmd + [drivers])
@@ -56,45 +49,34 @@ def copy_reject_file(patch_path):
     copy('{}.rej'.format(patch_file), folder_path)
 
 
-@change_dir
-def test_patch(patch_path, repo_path):
-    os.chdir(repo_path)
-    logger.info('Normalizing the paths in the patch')
-    normalize_path(patch_path)
-    
-    try:
-        logger.info("Applying patch")    
-        apply_patch(patch_path)
-    except RuntimeError as exc:
-        logger.error("Failed to apply patch")
-        copy_reject_file(patch_path)
-        raise exc
-    
-    try:
-        logger.info("Building LIS drivers and daemons")
-        build()
-    except RuntimeError as exc:
-        logger.error("Unable to build project")
-        raise exc 
+def apply_patches(patches_folder, builds_folder):
+    if os.path.exists(builds_folder): rmtree(builds_folder) 
+    os.mkdir(builds_folder)
 
-    try:
-        logger.info("Running repo cleanup")
-        build(clean=True)
-    except RuntimeError:
-        logger.warning("Failed to run project cleanup")
-
-def test_patches(patches_folder):
-    backup_folder = os.path.join(patches_folder, 'original')
-    if not os.path.exists(backup_folder): os.mkdir(backup_folder)
     for patch_file in os.listdir(patches_folder):
         patch_path = os.path.join(patches_folder, patch_file)
-        copy(patch_path, backup_folder)
-        with open(patch_path, 'r') as f:
-            commit_id = f.readline().strip().split()[1]
-        repo_path = './lis-next-{}'.format(commit_id)
-        if os.path.exists(repo_path): rmtree(repo_path)
+        repo_path = os.path.join(builds_folder, patch_file)
+        logger.info('Cloning into %s' % repo_path)
         clone_repo(LIS_NEXT_REPO_URL, repo_path)
         try:
-            test_patch(patch_path, os.path.join(repo_path, 'hv-rhel7.x/hv'))
-        except RuntimeError:
-            logger.error("Patch test failed.")
+            apply_patch(repo_path, patch_path)
+            logger.info('Successfully aplied patch on %s' % repo_path)
+        except RuntimeError as exc:
+            logger.error('Unable to apply patch %s' % patch_file)
+            logger.error(exc)
+
+def compile_patches(builds_folder):
+    for build_folder in os.listdir(builds_folder):
+        build_path = os.path.join(builds_folder, build_folder)
+        try:
+            build(build_path)
+            logger.info('Successfully compiled %s' % build_path)
+        except RuntimeError as exc:
+            logger.error('Unable to build %s' % build_path)
+            logger.error(exc)
+        
+        try:
+            build(build_path, clean=True)
+        except RuntimeError as exc:
+            logger.error('Error while running cleanup for %s' % build_path)
+            logger.error(exc)

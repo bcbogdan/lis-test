@@ -4,7 +4,7 @@ import logging
 import os
 from utils import get_arg_parser, manage_linux_repo
 from create_patches import get_commit_list, create_patch_files
-from patch_manager import test_patches
+from patch_manager import apply_patches, compile_patches
 logging.basicConfig(level=logging.INFO)
 logger=logging.getLogger(__name__)
 
@@ -32,9 +32,9 @@ if __name__ == '__main__':
     if command == 'create':
         create_patches(args)
     elif command == 'apply':
-        test_patches(args.patches_folder)
+        apply_patches(args.patches_folder, args.output_location)
     elif command == 'compile':
-        pass
+        compile_patches(args.builds_path)
     elif command == 'parse':
         pass
     elif command == 'commit':
