@@ -96,6 +96,22 @@ def get_arg_parser():
     commit_patches.add_argument(
         '-u', '--username'
     )
+
+    server = sub_parsers.add_parser('serve', help='Start patch server')
+    server.add_argument(
+        'expected_requests', 
+        type=int,
+        help='Number of POST requests expected'
+    )
+    server.add_argument(
+        '-a', '--address',
+        default='0.0.0.0'
+    )
+    server.add_argument(
+        '-p', '--port',
+        default=80,
+        type=int
+    )
     return parser
 
 def clone_repo(repo_url, repo_path):

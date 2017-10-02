@@ -5,6 +5,7 @@ import os
 from utils import get_arg_parser, manage_linux_repo
 from create_patches import get_commit_list, create_patch_files
 from patch_manager import apply_patches, compile_patches
+from server import start_server, PatchServerHandler, PatchServer
 logging.basicConfig(level=logging.INFO)
 logger=logging.getLogger(__name__)
 
@@ -39,3 +40,6 @@ if __name__ == '__main__':
         pass
     elif command == 'commit':
         pass
+    elif command == 'serve':
+        PatchServerHandler.expected_requests = args.expected_requests
+        start_server(PatchServer, PatchServerHandler.check, host=args.address, port=args.port)
