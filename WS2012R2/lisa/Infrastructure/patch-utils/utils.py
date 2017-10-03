@@ -1,6 +1,7 @@
 import subprocess
 import logging
 import fileinput
+import re
 
 logger=logging.getLogger(__name__)
 
@@ -21,9 +22,34 @@ def normalize_path(patch_path):
         for line in fileinput.input(patch_path, inplace=True):
             print line.replace(to_search, to_replace),
 
-def apply_patch(build_folder, patch_file, dry_run=False):
+def apply_patch(build_folder, patch_file):
     cmd = ['cd', build_folder, '&&', 'patch', '<', patch_file]
     return run_command(cmd)
+
+def parse_results(response_data):
+    regex_pattern = re.compile('^\s+Test\s([A-Za-z0-9\-\_]+)\s+:\s([A-Za-z]+)')
+
+    test_results = {}
+    for line in response_data:
+        result = regex_pattern.search(line)
+        if result:
+            test_results[result.group(1)] = result.group(2)
+
+    return test_results
+
+def get_commit_info(patch_path):
+    commit_id = None
+    commid_desc = None
+    with open(patch_path, 'r') as patch_info:
+        for index, line in enumerate(patch_info):
+            if index == 0:
+                commit_id = line.strip().split()[1]
+            elif index == 3:
+                commid_desc = line.strip().split('Subject:')[1].strip()
+            elif index > 4:
+                break
+    
+    return commit_id, commid_desc
 
 def build(build_folder, clean=False):
     base_build_cmd = ['cd', build_folder, '&&', 'make', '-C']

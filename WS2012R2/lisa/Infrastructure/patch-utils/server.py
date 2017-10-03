@@ -3,21 +3,9 @@ import SocketServer
 import logging
 import json
 import threading
-import re
+from utils import parse_results
 
 logger=logging.getLogger(__name__)
-
-def parse_results(response_data):
-    regex_pattern = re.compile('^\s+Test\s([A-Za-z0-9\-\_]+)\s+:\s([A-Za-z]+)')
-
-    test_results = {}
-    for line in response_data:
-        result = regex_pattern.search(line)
-        if result:
-            test_results[result.group(1)] = result.group(2)
-
-    return test_results
-
 
 class PatchServerHandler(object):
     post_request_count = 0

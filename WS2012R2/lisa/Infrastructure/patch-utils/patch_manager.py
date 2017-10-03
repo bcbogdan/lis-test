@@ -2,7 +2,7 @@ import logging
 import os
 from shutil import rmtree, move
 from json import load
-from utils import apply_patch, normalize_path
+from utils import apply_patch, normalize_path, build, get_commit_info
 from server import start_server, PatchServerHandler, PatchServer
 from git import GitWrapper
 
@@ -36,14 +36,14 @@ class PatchManager(object):
             logger.info('No patches created.')
 
     def apply(self):
-        if os.path.exists(self.builds_folder): rmtree(self.builds_folder) 
-        os.mkdir(self.builds_folder)
+        if os.path.exists(self.builds_path): rmtree(self.builds_path) 
+        os.mkdir(self.builds_path)
 
         for patch_file in os.listdir(self.patches_folder):
             patch_path = os.path.join(self.patches_folder, patch_file)
             normalize_path(patch_path)
 
-            repo_path = os.path.join(self.builds_folder, patch_file)
+            repo_path = os.path.join(self.builds_path, patch_file)
             logger.info('Cloning into %s' % repo_path)
             repo = GitWrapper(repo_path, self.remote_repo)
             try:
@@ -73,13 +73,15 @@ class PatchManager(object):
                 logger.error(exc)
 
     def commit(self):
-        commit_message =  "RH${RHELVERSION}:$commit_desc <upstream:$commit_id>"
-        for project in  os.listdir(self.projects_path):
+        commit_message = "RH7: {} <upstream:{}>"
+        for project in os.listdir(self.projects_path):
             project_path = os.path.join(self.projects_path, project)
+            patch_path = os.path.join(self.patch_path, project)
+            commit_id, commit_desc = get_commit_info(patch_path)
             repo = GitWrapper(project_path)
             repo.config(name=self.name, email=self.email)
             repo.add_files(['.','./\*.h','./\*.c'])
-            repo.commit_changes()
+            repo.commit(commit_message.format(commit_desc, commit_id))
             repo.push(self.remote_url, self.branch)
 
     def serve(self):

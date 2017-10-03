@@ -61,34 +61,36 @@ def get_arg_parser():
         default=False
     )
     
-    apply_patches = sub_parsers.add_parser('apply', help='Apply patches from a specified folder')
+    apply_patches = sub_parsers.add_parser('apply', help='Apply patches on a specified build')
     apply_patches.add_argument(
         'patches_folder',
-        help='Location of the patch files that will be applied',
-        default='.\patches'
+        help='Location of the patch files that will be applied'
     )
     apply_patches.add_argument(
         '-p', '--project',
-        help='Remote repository on which patches will be applied',
+        help='Remote repository that will be cloned',
         default=LIS_NEXT_REPO_URL
     )
     apply_patches.add_argument(
-        '-o', '--output-location',
+        '-b', '--builds-path',
         help='Location where the new builds will be saved',
         default=BUILDS_PATH
+    )
+    apply_patches.add_argument(
+        '-f', '--failures-path',
+        help='Directory where failed attempts will be copied',
+        default='/root/failed'
     )
 
     compile_patches = sub_parsers.add_parser('compile', help='Compile projects')
     compile_patches.add_argument(
         'builds_path',
-        help='Location of the builds that will be compiled',
-        default='/root/builds'
+        help='Location of the builds that will be compiled'
     )
-
-    parse_patches = sub_parsers.add_parser('parse', help='Build projects')
-    parse_patches.add_argument(
-        'log_folder',
-        help='Location of the log files that will be parsed'
+    compile_patches.add_argument(
+        '-f', '--failures-path',
+        help='Directory where failed attempts will be copied',
+        default='/root/failed'
     )
 
     commit_patches = sub_parsers.add_parser('commit', help='Commit patches')
@@ -96,7 +98,14 @@ def get_arg_parser():
         'builds_folder'
     )
     commit_patches.add_argument(
+        '-r', '--remote-url'
+    )
+    commit_patches.add_argument(
         '-e', '--email'
+    )
+    commit_patches.add_argument(
+        '-b', '--branch',
+        default='master'
     )
     commit_patches.add_argument(
         '-n', '--name'

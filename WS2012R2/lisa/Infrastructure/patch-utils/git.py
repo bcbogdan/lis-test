@@ -37,16 +37,17 @@ class GitWrapper(object):
         self.execute(['checkout', '-b', local_branch, tag])
 
     def config(self, name, email):
-        pass
+        self.execute(['config', '--local', 'user.email', email])
+        self.execute(['config', '--local', 'user.email', name])
     
-    def add_files(self):
-        pass
+    def add_files(self, file_list):
+        for file in file_list: self.execute(['add', file])
     
-    def commit(self):
-        pass
+    def commit(self, message):
+        self.execute(['commit', '-m', message])
 
     def push(self, remote_addres, branch):
-        pass
+        self.execute(['push', remote_addres, branch])
 
     def add_remote(self, remote_name, remote_url):
         return self.execute([
@@ -57,10 +58,6 @@ class GitWrapper(object):
         cmd = ['fetch']
         if tags: cmd.append("--tags")
         return self.execute(cmd.append(remote_name))
-    
-    def manage_repo(self, remote_branch=None):
-        #update linux repo - fetch from linux-next
-        pass
 
     def log_path(self, path, author=None, date=None, format='%H'):
         git_cmd = ['log']
