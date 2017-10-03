@@ -28,7 +28,7 @@ class PatchManager(object):
             files_map = load(data)
         commit_list = repo.get_commit_list(files_map, self.date, self.author)
         
-        patch_list = repo.create_patch_files(commit_list, self.patches_folder)
+        patch_list = repo.create_patches(commit_list, self.patches_folder)
         if len(patch_list) > 0:
             logger.info('Created the following patch files:')
             [logger.info(patch_path) for patch_path in patch_list]
@@ -45,7 +45,7 @@ class PatchManager(object):
 
             repo_path = os.path.join(self.builds_path, patch_file)
             logger.info('Cloning into %s' % repo_path)
-            repo = GitWrapper(repo_path, self.remote_repo)
+            repo = GitWrapper(repo_path, self.project)
             try:
                 apply_patch(repo_path, patch_path)
                 logger.info('Successfully aplied patch on %s' % repo_path)
@@ -55,8 +55,8 @@ class PatchManager(object):
                 move(patch_path, self.failures_path)
 
     def compile(self):
-        for build_folder in os.listdir(self.builds_folder):
-            build_path = os.path.join(self.builds_folder, build_folder)
+        for build_folder in os.listdir(self.builds_path):
+            build_path = os.path.join(self.builds_path, build_folder)
             try:
                 build(build_path)
                 logger.info('Successfully compiled %s' % build_path)
@@ -86,4 +86,6 @@ class PatchManager(object):
 
     def serve(self):
         PatchServerHandler.expected_requests = self.expected_requests
+        PatchServerHandler.builds_path = self.builds_path
+        PatchServerHandler.failures_path = self.failures_path
         start_server(PatchServer, PatchServerHandler.check, host=self.address, port=self.port)

@@ -132,4 +132,15 @@ def get_arg_parser():
         default=80,
         type=int
     )
+    server.add_argument(
+        '-b', '--builds-path',
+        help='Location where the new builds will be saved',
+        default=BUILDS_PATH
+    )
+    server.add_argument(
+        '-f', '--failures-path',
+        help='Directory where failed attempts will be copied',
+        default='/root/failed'
+    )
+
     return parser

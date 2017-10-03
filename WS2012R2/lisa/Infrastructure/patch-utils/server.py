@@ -3,18 +3,24 @@ import SocketServer
 import logging
 import json
 import threading
+import os
 from utils import parse_results
+from collections import defaultdict
+from shutil import move
 
 logger=logging.getLogger(__name__)
 
 class PatchServerHandler(object):
     post_request_count = 0
-    results = {}
+    results = defaultdict(dict)
     expected_requests = 0
+    builds_path = None
+    failures_path = None
 
     @staticmethod
     def update(results, headers):
-        PatchServerHandler.results[headers['DISTRO']] = results
+        for patch_name, result in results.items():
+            PatchServerHandler.results[patch_name][headers['DISTRO']] = result 
         
         PatchServerHandler.post_request_count += 1
         logger.info(PatchServerHandler.results)
@@ -23,7 +29,17 @@ class PatchServerHandler(object):
     @staticmethod
     def check():
         if PatchServerHandler.post_request_count == PatchServerHandler.expected_requests:
+            for patch_name, results in PatchServerHandler.results.items():
+                if 'Failed' in results.values():
+                    logger.error('{} failed boot tests.'.format(patch_name))
+                    move(
+                        os.path.join(PatchServerHandler.builds_path, patch_name),
+                        PatchServerHandler.failures_path
+                    )
+                else:
+                    logger.info('{} passed all boot tests.'.format(patch_name))
             return True
+    
         return False 
 
 class PatchServer(BaseHTTPRequestHandler):

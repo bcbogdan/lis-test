@@ -18,22 +18,25 @@ class GitWrapper(object):
 
     def execute(self, arguments):
         return run_command(
-            self.base_cmd.extend(arguments),
+            self.base_cmd + arguments,
             work_dir=self.path
         )
 
     @staticmethod
     def clone(remote_url, destination=""):
         return run_command(
-            GitWrapper.base_cmd.extend([
+            GitWrapper.base_cmd + [
                 'clone', remote_url, destination
             ])
-        )
     
     def update_from_remote(self, local_branch, tag_name):
         self.execute(['checkout', 'master'])
         self.execute(['remote', 'update'])
-        tag = self.execute(['tag', '-l', tag_name, '|', 'tail', '-n', '1'])
+        tag = self.execute(['tag', '-l', tag_name]).split()[-1]
+        try:
+            self.execute(['branch', '-D', local_branch])
+        except RuntimeError:
+            logger.warning('Unable to delete branch %s' % local_branch)
         self.execute(['checkout', '-b', local_branch, tag])
 
     def config(self, name, email):
@@ -75,7 +78,7 @@ class GitWrapper(object):
             '-o', destination
             ]).strip()
         
-    def create_patches(self, commit_list, patch_folder, reject_folder):
+    def create_patches(self, commit_list, patch_folder):
         if os.path.exists(patch_folder): rmtree(patch_folder)
         os.mkdir(patch_folder)
         patch_list = []
@@ -97,8 +100,11 @@ class GitWrapper(object):
             commits = self.log_path(linux_path, date=date, author=author)
             commit_subjects.extend(self.log_path(linux_path, date=date, author=author, format='%h---%s'))
             commit_list.extend(commits)
-    
-        logger.info('Selected the following commits:')
-        [logger.info(subject) for subject in commit_subjects]
+
+        if len(commit_list) > 0:
+            logger.info('Selected the following commits:')
+            [logger.info(subject) for subject in commit_subjects]
+        else:
+            logger.info('No new commits found')
 
         return set(commit_list)
