@@ -77,7 +77,7 @@ class PatchManager(object):
         commit_message = "RH7: {} <upstream:{}>"
         for project in os.listdir(self.builds_folder):
             project_path = os.path.join(self.builds_folder, project)
-            patch_path = os.path.join(self.patch_path, project)
+            patch_path = os.path.join(self.patch_files, project)
             commit_id, commit_desc = get_commit_info(patch_path)
             repo = GitWrapper(project_path)
             repo.config(name=self.name, email=self.email)
