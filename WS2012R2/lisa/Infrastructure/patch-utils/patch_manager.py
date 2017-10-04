@@ -4,6 +4,7 @@ from shutil import rmtree, move
 from json import load
 from utils import apply_patch, normalize_path, build, get_commit_info
 from server import start_server, PatchServerHandler, PatchServer
+from urlparse import urlparse, urlunparse
 from git import GitWrapper
 
 logger = logging.getLogger(__name__)
@@ -74,15 +75,17 @@ class PatchManager(object):
 
     def commit(self):
         commit_message = "RH7: {} <upstream:{}>"
-        for project in os.listdir(self.projects_path):
-            project_path = os.path.join(self.projects_path, project)
+        for project in os.listdir(self.builds_folder):
+            project_path = os.path.join(self.builds_folder, project)
             patch_path = os.path.join(self.patch_path, project)
             commit_id, commit_desc = get_commit_info(patch_path)
             repo = GitWrapper(project_path)
             repo.config(name=self.name, email=self.email)
             repo.add_files(['.','./\*.h','./\*.c'])
             repo.commit(commit_message.format(commit_desc, commit_id))
-            repo.push(self.remote_url, self.branch)
+            parsed_url = urlparse(self.remote_url)
+            new_url = parsed_url._replace(netloc="{}:{}@{}".format(self.username, self.password, parsed_url.netloc))
+            repo.push(urlunparse(new_url), self.branch)
 
     def serve(self):
         PatchServerHandler.expected_requests = self.expected_requests
