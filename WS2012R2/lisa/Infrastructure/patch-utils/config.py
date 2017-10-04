@@ -101,6 +101,9 @@ def get_arg_parser():
         '-r', '--remote-url'
     )
     commit_patches.add_argument(
+        '-p', '--patch-path'
+    )
+    commit_patches.add_argument(
         '-e', '--email'
     )
     commit_patches.add_argument(
