@@ -13,6 +13,7 @@ logger=logging.getLogger(__name__)
 class PatchServerHandler(object):
     post_request_count = 0
     results = defaultdict(dict)
+    expected_results = []
     expected_requests = 0
     builds_path = None
     failures_path = None
@@ -30,14 +31,15 @@ class PatchServerHandler(object):
     def check():
         if PatchServerHandler.post_request_count == PatchServerHandler.expected_requests:
             for patch_name, results in PatchServerHandler.results.items():
-                if 'Failed' in results.values():
-                    logger.error('{} failed boot tests.'.format(patch_name))
-                    move(
-                        os.path.join(PatchServerHandler.builds_path, patch_name),
-                        PatchServerHandler.failures_path
-                    )
-                else:
-                    logger.info('{} passed all boot tests.'.format(patch_name))
+                if patch_name in PatchServerHandler.expected_results:
+                    if 'Failed' in results.values():
+                        logger.warning('{} failed boot tests.'.format(patch_name))
+                        move(
+                            os.path.join(PatchServerHandler.builds_path, patch_name),
+                            PatchServerHandler.failures_path
+                        )
+                    else:
+                        logger.info('{} passed all boot tests.'.format(patch_name))
             return True
     
         return False 

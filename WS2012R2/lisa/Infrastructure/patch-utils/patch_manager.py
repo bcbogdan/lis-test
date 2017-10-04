@@ -88,4 +88,5 @@ class PatchManager(object):
         PatchServerHandler.expected_requests = self.expected_requests
         PatchServerHandler.builds_path = self.builds_path
         PatchServerHandler.failures_path = self.failures_path
+        PatchServerHandler.expected_results = os.listdir(self.builds_path)
         start_server(PatchServer, PatchServerHandler.check, host=self.address, port=self.port)
