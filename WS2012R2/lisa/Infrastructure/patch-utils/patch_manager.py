@@ -82,7 +82,7 @@ class PatchManager(object):
             commit_id, commit_desc = get_commit_info(patch_path)
             repo = GitWrapper(project_path)
             repo.config(name=self.name, email=self.email)
-            repo.add_files(['.','./\*.h','./\*.c'])
+            repo.add_files(['*.h','*.c'])
             repo.commit(commit_message.format(commit_desc, commit_id))
             parsed_url = urlparse(self.remote_url)
             new_url = parsed_url._replace(netloc="{}:{}@{}".format(self.username, self.password, parsed_url.netloc))

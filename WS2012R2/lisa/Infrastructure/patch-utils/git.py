@@ -44,6 +44,7 @@ class GitWrapper(object):
         self.execute(['config', '--local', 'user.email', name])
     
     def add_files(self, file_list):
+        self.execute(['add', '-u', '.'])
         for file in file_list: self.execute(['add', file])
     
     def commit(self, message):
