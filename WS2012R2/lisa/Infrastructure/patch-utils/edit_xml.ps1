@@ -44,7 +44,7 @@ class XMLWrapper {
             <onError>Continue</onError>
             <setupScript>
                 <file>setupscripts\RevertSnapshot.ps1</file>
-                <file>Insfrastructure\patch-utils\copy-files.ps1</file>
+                <file>setupscripts\CopyFiles.ps1</file>
             </setupScript>
             <testName>install_lis-next</testName>
             <testScript>install_lis_next.sh</testScript>
