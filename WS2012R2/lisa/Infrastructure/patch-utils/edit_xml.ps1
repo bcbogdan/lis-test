@@ -1,13 +1,11 @@
 
-param([string] $xmlPath, [string] $testNames, [string] $distroName, [string] $propertiesPath)
+param([string] $xmlPath, [string] $testNames, [string] $imagePath)
 
 class XMLWrapper {
     [xml] $xml
-    [System.Collections.Hashtable] $properties
 
-    XMLWrapper([String] $source_path, [String] $propertiesFile) {
+    XMLWrapper([String] $source_path) {
         $this.xml = [xml](Get-Content $source_path)
-        $this.properties =  Convertfrom-Stringdata (Get-Content $propertiesFile -raw)
     }
 
     [void] AddBootTests([String] $testType, [String] $testName, [Array] $testParams) {
@@ -35,8 +33,7 @@ class XMLWrapper {
         $this.xml.config.testCases.AppendChild($this.xml.ImportNode($bootTest.test, $true))
     }
 
-    [void] UpdateDistroImage([String] $distroName) {
-        $imagePath = $this.properties."${distroName}"
+    [void] UpdateDistroImage([String] $imagePath) {
         $this.xml.config.global.imageStoreDir = $imagePath
     }
 
@@ -79,12 +76,12 @@ class XMLWrapper {
 }
 
 
-$xml = [XMLWrapper]::new($xmlPath, $propertiesPath)
+$xml = [XMLWrapper]::new($xmlPath)
 
 $tests = $testNames.Split(';')
 foreach($test in $tests) {
     $xml.AddBootTests('INSTALL_LIS_NEXT', $test, @("custom_lis_next=/root/${test}", "source_path=/root/builds/${test}"))
 }
 
-$xml.UpdateDistroImage($distroName)
+$xml.UpdateDistroImage($imagePath)
 $xml.xml.Save($xmlPath)
