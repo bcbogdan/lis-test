@@ -48,7 +48,8 @@ class PatchManager(object):
             logger.info('Cloning into %s' % repo_path)
             repo = GitWrapper(repo_path, self.project)
             try:
-                apply_patch(repo_path, patch_path)
+                #TODO: Add internal path as parameter
+                apply_patch(repo_path, os.path.join(patch_path, '/hv-rhel7.x/hv'))
                 logger.info('Successfully aplied patch on %s' % repo_path)
             except RuntimeError as exc:
                 logger.error('Unable to apply patch %s' % patch_file)

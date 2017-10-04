@@ -23,8 +23,8 @@ def normalize_path(patch_path):
             print line.replace(to_search, to_replace),
 
 def apply_patch(build_folder, patch_file):
-    cmd = ['cd', build_folder, '&&', 'patch', '<', patch_file]
-    return run_command(cmd)
+    cmd = ['patch', '-f', '<', patch_file]
+    return run_command(cmd, build_folder)
 
 def parse_results(response_data):
     regex_pattern = re.compile('^\s+Test\s([A-Za-z0-9\-\_]+)\s+:\s([A-Za-z]+)')
