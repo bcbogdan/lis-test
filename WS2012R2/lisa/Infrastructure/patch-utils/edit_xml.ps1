@@ -1,5 +1,5 @@
 
-param([string] $xmlPath, [string] $testNames, [string] $imagePath)
+param([string] $xmlPath, [string] $testNames, [string] $imagePath, [string] $remoteSource)
 
 class XMLWrapper {
     [xml] $xml
@@ -44,7 +44,6 @@ class XMLWrapper {
             <onError>Continue</onError>
             <setupScript>
                 <file>setupscripts\RevertSnapshot.ps1</file>
-                <file>setupscripts\CopyFiles.ps1</file>
             </setupScript>
             <testName>install_lis-next</testName>
             <testScript>install_lis_next.sh</testScript>
@@ -80,7 +79,7 @@ $xml = [XMLWrapper]::new($xmlPath)
 
 $tests = $testNames.Split(';')
 foreach($test in $tests) {
-    $xml.AddBootTests('INSTALL_LIS_NEXT', $test, @("custom_lis_next=/root/${test}", "source_path=/root/builds/${test}"))
+    $xml.AddBootTests('INSTALL_LIS_NEXT', $test, @("custom_build=/root/${test}", "lis_source=${remoteSource}/${test}"))
 }
 
 $xml.UpdateDistroImage($imagePath)
