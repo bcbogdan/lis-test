@@ -78,7 +78,7 @@ def run_command(command_arguments, work_dir='./'):
         raise RuntimeError(
             "Command failed, status code %s stdout %r stderr %r" % (
                 ps_command.returncode, stdout_data, stderr_data
-            )
+            ), stdout_data, stderr_data
         )
     else:
         return stdout_data

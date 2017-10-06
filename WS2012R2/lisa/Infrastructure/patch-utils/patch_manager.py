@@ -22,6 +22,7 @@ class PatchManager(object):
             logger.error('Invalid command - {}'.format(self.command))
 
     def create(self):
+        # check if valid path
         repo = GitWrapper(self.linux_repo)
         repo.update_from_remote(self.branch, self.remote_tag)
 
@@ -49,11 +50,13 @@ class PatchManager(object):
             repo = GitWrapper(repo_path, self.project)
             try:
                 #TODO: Add internal path as parameter
-                apply_patch(repo_path, os.path.join(patch_path, '/hv-rhel7.x/hv'))
-                logger.info('Successfully aplied patch on %s' % repo_path)
+                work_path = os.path.join(repo_path,'hv-rhel7.x/hv')
+                logger.info('Appling patch on %s' % work_path)
+                apply_patch(work_path, patch_path)
             except RuntimeError as exc:
                 logger.error('Unable to apply patch %s' % patch_file)
-                logger.error(exc)
+                logger.error(exc[1])
+                logger.error(exc[2])
                 move(patch_path, self.failures_path)
 
     def compile(self):
@@ -91,6 +94,9 @@ class PatchManager(object):
     def serve(self):
         PatchServerHandler.expected_requests = self.expected_requests
         PatchServerHandler.builds_path = self.builds_path
+        for build in os.listdir(self.builds_path):
+            PatchServerHandler.expected_results.append(build)
+            PatchServerHandler.expected_results.append("install_%s" % build)
         PatchServerHandler.failures_path = self.failures_path
         PatchServerHandler.expected_results = os.listdir(self.builds_path)
         start_server(PatchServer, PatchServerHandler.check, host=self.address, port=self.port)

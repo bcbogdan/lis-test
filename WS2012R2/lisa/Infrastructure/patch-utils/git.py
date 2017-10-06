@@ -33,6 +33,7 @@ class GitWrapper(object):
         self.execute(['checkout', 'master'])
         self.execute(['remote', 'update'])
         tag = self.execute(['tag', '-l', tag_name]).split()[-1]
+        logger.info('Using tag %s' % tag)
         try:
             self.execute(['branch', '-D', local_branch])
         except RuntimeError:
@@ -98,8 +99,10 @@ class GitWrapper(object):
         commit_subjects = []
 
         for linux_path, lis_next_path in files_map.items():
+            logger.info('Searching for new commits in %s' % linux_path)            
             commits = self.log_path(linux_path, date=date, author=author)
             commit_subjects.extend(self.log_path(linux_path, date=date, author=author, format='%h---%s'))
+            logger.info('%d new commits found' % len(commits))
             commit_list.extend(commits)
 
         if len(commit_list) > 0:
