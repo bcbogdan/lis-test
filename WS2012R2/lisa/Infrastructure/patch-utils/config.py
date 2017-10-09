@@ -13,9 +13,11 @@ FILES_MAP = {
     "drivers/net/hyperv": "hv/"
 }
 
-def check_path(path):
+def path(path):
     if not os.path.exists(path):
         raise ValueError('Path %s does not exists' % path)
+    else:
+        return path
     
 class PathAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string):
@@ -87,7 +89,7 @@ def get_arg_parser():
     apply_patches.add_argument(
         'patches_folder',
         help='Location of the patch files that will be applied',
-        type=check_path
+        type=path
     )
     apply_patches.add_argument(
         '-p', '--project',
@@ -111,7 +113,7 @@ def get_arg_parser():
     compile_patches.add_argument(
         'builds_path',
         help='Location of the builds that will be compiled',
-        type=check_path
+        type=path
     )
     compile_patches.add_argument(
         '-f', '--failures-path',
@@ -123,7 +125,7 @@ def get_arg_parser():
     commit_patches = sub_parsers.add_parser('commit', help='Commit patches')
     commit_patches.add_argument(
         'builds_folder',
-        type=check_path
+        type=path
     )
     commit_patches.add_argument(
         '-r', '--remote-url'
