@@ -1,5 +1,6 @@
 import argparse
-
+import os
+from shutil import rmtree
 LIS_NEXT_REPO_URL = 'https://github.com/LIS/lis-next.git'
 LINUX_REPO_URL = 'https://github.com/torvalds/linux.git'
 LINUX_NEXT_REMOTE = 'https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git'
@@ -12,7 +13,27 @@ FILES_MAP = {
     "drivers/net/hyperv": "hv/"
 }
 
+def check_path(path):
+    if not os.path.exists(path):
+        raise ValueError('Path %s does not exists' % path)
+    
+class PathAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string):
+        action = parser.prog.split()[1]
+        if self.dest == 'failures_path':
+            if not os.path.exists(values):
+                os.mkdir(values)
+            values = os.path.join(values, action)
+        
+        if os.path.exists(values):
+            rmtree(values)
+
+        os.mkdir(values)
+        setattr(namespace, self.dest, values) 
+
+
 def get_arg_parser():
+    #TODO: Add common argument to a parent parser
     parser = argparse.ArgumentParser()
     sub_parsers = parser.add_subparsers(help='CLI Commands')
     
@@ -37,7 +58,8 @@ def get_arg_parser():
     create_patch.add_argument(
         '-p', '--patches-folder',
         help='Location of the patch files',
-        default='./patches'
+        default='./patches',
+        action=PathAction
     )
     create_patch.add_argument(
         '-t', '--remote_tag',
@@ -64,7 +86,8 @@ def get_arg_parser():
     apply_patches = sub_parsers.add_parser('apply', help='Apply patches on a specified build')
     apply_patches.add_argument(
         'patches_folder',
-        help='Location of the patch files that will be applied'
+        help='Location of the patch files that will be applied',
+        type=check_path
     )
     apply_patches.add_argument(
         '-p', '--project',
@@ -74,28 +97,33 @@ def get_arg_parser():
     apply_patches.add_argument(
         '-b', '--builds-path',
         help='Location where the new builds will be saved',
-        default=BUILDS_PATH
+        default=BUILDS_PATH,
+        action=PathAction
     )
     apply_patches.add_argument(
         '-f', '--failures-path',
         help='Directory where failed attempts will be copied',
-        default='/root/failed'
+        default='/root/failed',
+        action=PathAction
     )
 
     compile_patches = sub_parsers.add_parser('compile', help='Compile projects')
     compile_patches.add_argument(
         'builds_path',
-        help='Location of the builds that will be compiled'
+        help='Location of the builds that will be compiled',
+        type=check_path
     )
     compile_patches.add_argument(
         '-f', '--failures-path',
         help='Directory where failed attempts will be copied',
-        default='/root/failed'
+        default='/root/failed',
+        action=PathAction
     )
 
     commit_patches = sub_parsers.add_parser('commit', help='Commit patches')
     commit_patches.add_argument(
-        'builds_folder'
+        'builds_folder',
+        type=check_path
     )
     commit_patches.add_argument(
         '-r', '--remote-url'
@@ -143,7 +171,8 @@ def get_arg_parser():
     server.add_argument(
         '-f', '--failures-path',
         help='Directory where failed attempts will be copied',
-        default='/root/failed'
+        default='/root/failed',
+        action=PathAction
     )
 
     return parser

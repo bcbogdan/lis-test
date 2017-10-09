@@ -16,6 +16,8 @@ class PatchManager(object):
     
     def __call__(self):
         try:
+            logger.info('Running %s command with the following arguments:' % self.command)
+            logger.info(self.__dict__)
             method = getattr(self, self.command)
             method()
         except AttributeError:
@@ -38,9 +40,8 @@ class PatchManager(object):
             logger.info('No patches created.')
 
     def apply(self):
-        if os.path.exists(self.builds_path): rmtree(self.builds_path) 
-        os.mkdir(self.builds_path)
-
+        patch_list = os.listdir(self.patches_folder)
+        
         for patch_file in os.listdir(self.patches_folder):
             patch_path = os.path.join(self.patches_folder, patch_file)
             normalize_path(patch_path)
