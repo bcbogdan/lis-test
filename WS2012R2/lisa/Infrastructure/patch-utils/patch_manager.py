@@ -55,11 +55,14 @@ class PatchManager(object):
                 logger.info('Appling patch on %s' % work_path)
                 apply_patch(work_path, patch_path)
             except RuntimeError as exc:
-                logger.error('Unable to apply patch %s' % patch_file)
-                logger.error(exc[1])
-                logger.error(exc[2])
+                logger.error('Unable to apply patch %s on %s' % (patch_file, repo_path))
+                with open('%s/%s.log' % (self.failures_path, patch_file), 'w') as log_file:
+                    log_file.write(exc[1])
+                    log_file.write(exc[2])
                 move(patch_path, self.failures_path)
-
+                move(repo_path, '%s/%s' % (self.failures_path, '%s-build' % patch_file))
+                logger.error('Logs cand be found at %s' % (self.failures_path+patch_file+'.log'))            
+    
     def compile(self):
         for build_folder in os.listdir(self.builds_path):
             build_path = os.path.join(self.builds_path, build_folder)

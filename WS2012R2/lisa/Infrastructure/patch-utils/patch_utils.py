@@ -3,7 +3,7 @@ import logging
 from config import get_arg_parser
 from patch_manager import PatchManager
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 def main(arguments):
