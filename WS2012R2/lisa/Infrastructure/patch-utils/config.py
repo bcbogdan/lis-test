@@ -150,6 +150,24 @@ def get_arg_parser():
         '-u', '--username'
     )
 
+    log_parser = sub_parsers.add_parser('serve', help='Parse boot results')
+    log_parser.add_argument(
+        'results_path',
+        type=path
+    )
+    log_parser.add_argument(
+        '-f', '--failures-path',
+        help='Directory where failed attempts will be copied',
+        default='/root/failed',
+        action=PathAction
+    )
+    log_parser.add_argument(
+        '-b', '--builds-path',
+        help='Location where the new builds will be saved',
+        default=BUILDS_PATH,
+        action=PathAction
+    )
+
     server = sub_parsers.add_parser('serve', help='Start patch server')
     server.add_argument(
         'expected_requests', 

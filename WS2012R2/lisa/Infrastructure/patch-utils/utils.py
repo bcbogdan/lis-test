@@ -26,14 +26,15 @@ def apply_patch(build_folder, patch_file):
     cmd = ['patch', '-f', '<', patch_file]
     return run_command(cmd, build_folder)
 
-def parse_results(response_data):
+def parse_results(response_data, expected_tests):
     regex_pattern = re.compile('^\s+Test\s([A-Za-z0-9\-\_]+)\s+:\s([A-Za-z]+)')
 
     test_results = {}
     for line in response_data:
         result = regex_pattern.search(line)
         if result:
-            test_results[result.group(1)] = result.group(2)
+            if result.group(1) in expected_tests:
+                test_results[result.group(1)] = result.group(2)
 
     return test_results
 

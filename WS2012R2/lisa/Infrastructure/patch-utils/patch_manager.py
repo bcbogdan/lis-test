@@ -2,7 +2,7 @@ import logging
 import os
 from shutil import rmtree, move
 from json import load
-from utils import apply_patch, normalize_path, build, get_commit_info
+from utils import apply_patch, normalize_path, build, get_commit_info, parse_results
 from server import start_server, PatchServerHandler, PatchServer
 from urlparse import urlparse, urlunparse
 from git import GitWrapper
@@ -59,7 +59,6 @@ class PatchManager(object):
                 with open('%s/%s.log' % (self.failures_path, patch_file), 'w') as log_file:
                     log_file.write(exc[1])
                     log_file.write(exc[2])
-                move(patch_path, self.failures_path)
                 move(repo_path, '%s/%s' % (self.failures_path, '%s-build' % patch_file))
                 logger.error('Logs cand be found at %s' % (self.failures_path+patch_file+'.log'))            
     
@@ -94,6 +93,19 @@ class PatchManager(object):
             parsed_url = urlparse(self.remote_url)
             new_url = parsed_url._replace(netloc="{}:{}@{}".format(self.username, self.password, parsed_url.netloc))
             repo.push(urlunparse(new_url), self.branch)
+
+    def parse(self):
+        tested_patches = os.listdir(self.builds_path)
+        result_dict = {}
+        for log_file in os.listdir(self.results_path):
+            log_path = os.path.join(self.results_path, log_file)
+            with open(log_path, 'r') as log_content:
+                results = parse_results(log_content, tested_patches)
+                for patch_name, result in results.items():
+                    if result != 'Passed':
+                        logger.warning('%s failed on %s' % (patch_name, log_file))
+                        build_path = os.path.join(self.builds_path, patch_name)
+                        move(build_path, self.failures_path)
 
     def serve(self):
         PatchServerHandler.expected_requests = self.expected_requests
