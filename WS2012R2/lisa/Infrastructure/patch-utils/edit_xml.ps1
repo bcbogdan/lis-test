@@ -10,16 +10,10 @@ class XMLWrapper {
 
     [void] AddBootTests([String] $testType, [String] $testName, [Array] $testParams) {
         $installSuiteTest = $this.xml.CreateElement('suiteTest')
-        $installSuiteTest.AppendChild($this.xml.CreateTextNode("install_${testName}"))
-        
-        $bootSuiteTest = $this.xml.CreateElement('suiteTest')
-        $bootSuiteTest.AppendChild($this.xml.CreateTextNode($testName))
+        $installSuiteTest.AppendChild($this.xml.CreateTextNode("${testName}"))
         
         $installLisTest = [XMLWrapper]::GetInstallLisTest()
-        $installLisTest.test.testName = "install_${testName}"
-
-        $bootTest = [XMLWrapper]::GetKvpBasicTest()
-        $bootTest.test.testName = $testName
+        $installLisTest.test.testName = "${testName}"
 
         foreach($param in $testParams) {
             $paramElement = $installLisTest.CreateElement('param')
@@ -28,10 +22,8 @@ class XMLWrapper {
         }
 
         $this.xml.config.testSuites.suite.suiteTests.AppendChild($installSuiteTest)
-        $this.xml.config.testSuites.suite.suiteTests.AppendChild($bootSuiteTest)
         $this.xml.config.testCases.AppendChild($this.xml.ImportNode($installLisTest.test, $true))
-        $this.xml.config.testCases.AppendChild($this.xml.ImportNode($bootTest.test, $true))
-    }
+     }
 
     [void] UpdateDistroImage([String] $imagePath) {
         $this.xml.config.global.imageStoreDir = $imagePath
@@ -46,7 +38,7 @@ class XMLWrapper {
                 <file>setupscripts\RevertSnapshot.ps1</file>
             </setupScript>
             <testName>install_lis-next</testName>
-            <testScript>install_lis_next.sh</testScript>
+            <testScript>Infrastructure\patch-utils\patch_boot_test.ps1</testScript>
             <timeout>800</timeout>
             <testParams>
                 <param>TC_COVERED=lis-next-01</param>
@@ -55,23 +47,6 @@ class XMLWrapper {
         </test>
         "
     }
-
-    [xml] static GetKvpBasicTest() {
-        return [xml]"
-        <test>
-            <testName>KVP_Basic</testName>
-            <testScript>SetupScripts\KVP_Basic.ps1</testScript>
-            <timeout>600</timeout>
-            <onError>Continue</onError>
-            <noReboot>True</noReboot>
-            <testparams>
-                <param>TC_COVERED=KVP-01</param>
-                <param>DE_change=no</param>
-            </testparams>
-        </test>
-        "
-    }
-
 }
 
 
