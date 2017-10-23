@@ -2,6 +2,8 @@ from utils import run_command
 from shutil import rmtree
 import os
 import logging
+import json
+import requests
 
 logger=logging.getLogger(__name__)
 
@@ -56,7 +58,17 @@ class GitWrapper(object):
         return self.execute([
             'remote', 'add', remote_name, remote_url
             ])
-    
+
+    def pull_request(self, user, token, title, branch, base='master'):
+        body = {
+            'title': title,
+            'head': '%s:%s' % (user, branch),
+            'base': base
+        }
+        url = 'https://api.github.com/repos/lis/lis-next/pulls'
+        headers = {"Authorization": "token %s" % token}
+        return requests.post(url, data=json.dumps(body), headers=headers)
+
     def fetch(self, remote_name, tags=False):
         cmd = ['fetch']
         if tags: cmd.append("--tags")

@@ -63,8 +63,10 @@ class PatchManager(object):
                 with open('%s/%s.log' % (self.failures_path, patch_file), 'w') as log_file:
                     log_file.write(exc[1])
                     log_file.write(exc[2])
+                logger.error(exc[1])
+                logger.error(exc[2])
                 move(repo_path, '%s/%s' % (self.failures_path, '%s-build' % patch_file))
-                logger.error('Logs cand be found at %s' % (self.failures_path+patch_file+'.log'))            
+                logger.error('Logs cand be found at %s' % (self.failures_path + '/' +patch_file+'.log'))            
     
     def compile(self):
         for build_folder in os.listdir(self.builds_path):
@@ -93,10 +95,13 @@ class PatchManager(object):
             repo = GitWrapper(project_path)
             repo.config(name=self.name, email=self.email)
             repo.add_files(['*.h','*.c'])
-            repo.commit(commit_message.format(commit_desc, commit_id))
+            commit_message = commit_message.format(commit_desc, commit_id)
+            repo.commit(commit_message)
             parsed_url = urlparse(self.remote_url)
             new_url = parsed_url._replace(netloc="{}:{}@{}".format(self.username, self.password, parsed_url.netloc))
             repo.push(urlunparse(new_url), self.branch)
+            response = repo.pull_request(self.username, self.password, commit_message, self.branch)
+            logger.info("Pull request status code - %s" % response.status_code)
 
     def parse(self):
         tested_patches = os.listdir(self.builds_path)
